@@ -199,16 +199,11 @@ export async function fetchRecommendations(
   config: RecsysConfig,
   params: RecommendationParams,
 ): Promise<RecommendationResponse> {
-  const query = new URLSearchParams({
-    user_id: params.userId,
-    limit: String(params.limit ?? 12),
-  });
-  if (params.scenario) query.set("scenario", params.scenario);
-  if (params.cursor) query.set("cursor", params.cursor);
-
+  // Текущий API берёт профиль из Bearer-сессии, а не из query user_id.
+  const query = new URLSearchParams({ limit: String(params.limit ?? 12) });
   const payload = await request<unknown>(
     config,
-    `/recommendations?${query.toString()}`,
+    `/recommendations/me?${query.toString()}`,
     { method: "GET" },
     params.signal,
   );
@@ -220,22 +215,29 @@ export async function sendFeedback(
   config: RecsysConfig,
   feedback: FeedbackPayload,
 ): Promise<FeedbackResponse> {
-  const payload = await request<unknown>(config, "/feedback", {
-    method: "POST",
-    body: JSON.stringify(feedback),
-  });
-
-  if (isRecord(payload)) {
-    return { ...payload, accepted: payload.accepted !== false };
+  // В текущем OpenAPI нет /feedback: покупка пишется через /purchases.
+  // Клик не имеет отдельного эндпоинта — считаем его принятым локально.
+  if (feedback.action !== "purchase") {
+    return { accepted: true, mode: "local" };
   }
-
+  const payload = await request<unknown>(config, "/purchases", {
+    method: "POST",
+    body: JSON.stringify({ item_id: feedback.item_id }),
+  });
+  if (isRecord(payload)) {
+    return { ...payload, accepted: true };
+  }
   return { accepted: true };
 }
 
 export async function checkHealth(config: RecsysConfig): Promise<HealthResponse> {
   const payload = await request<unknown>(config, "/health", { method: "GET" });
   if (isRecord(payload)) {
-    return { ...payload, status: asString(payload.status) ?? "ok" };
+    return {
+      ...payload,
+      status: asString(payload.status) ?? "ok",
+      model_version: asString(payload.schema_version),
+    };
   }
   return { status: "ok" };
 }
@@ -263,64 +265,49 @@ export interface NewRunResponse {
 }
 
 export async function fetchDbStats(config: RecsysConfig): Promise<DbStats> {
-  const payload = await request<unknown>(config, "/debug/stats", { method: "GET" });
-  if (!isRecord(payload)) throw new RecsysError("Ответ /debug/stats не является объектом");
+  // В текущем OpenAPI нет /debug/stats — считаем доступность по health и каталогу.
+  const [health, products] = await Promise.all([
+    request<unknown>(config, "/health", { method: "GET" }),
+    request<unknown>(config, "/products?limit=1", { method: "GET" }),
+  ]);
+  const h = isRecord(health) ? health : {};
+  const p = isRecord(products) ? products : {};
   const tables: Record<string, number> = {};
-  const raw = payload.tables;
-  if (isRecord(raw)) {
-    Object.keys(raw).forEach((key) => {
-      const value = raw[key];
-      if (typeof value === "number") tables[key] = value;
-    });
-  }
+  const total = asNumber(p.total);
+  if (total !== undefined) tables.catalog_offers = total;
   return {
-    status: asString(payload.status) ?? "ok",
-    model_version: asString(payload.model_version),
+    status: asString(h.status) ?? "ok",
+    model_version: asString(h.schema_version),
     tables,
   };
 }
 
 export async function fetchRuns(
   config: RecsysConfig,
-  userId: string,
-  limit = 10,
+  _userId: string,
+  _limit = 10,
 ): Promise<{ user_id: string; client_id: string; runs: RunInfo[] }> {
-  const query = new URLSearchParams({ user_id: userId, limit: String(limit) });
-  const payload = await request<unknown>(config, `/debug/runs?${query.toString()}`, { method: "GET" });
-  if (!isRecord(payload)) throw new RecsysError("Ответ /debug/runs не является объектом");
-  const rawRuns = Array.isArray(payload.runs) ? payload.runs : [];
+  // Истории run'ов в публичном API нет — показываем текущий профиль.
+  const payload = await request<unknown>(config, "/users/me", { method: "GET" });
+  const record = isRecord(payload) ? payload : {};
   return {
-    user_id: userId,
-    client_id: asString(payload.client_id) ?? "—",
-    runs: rawRuns.map((raw, index): RunInfo => {
-      const record = isRecord(raw) ? raw : {};
-      const rawItems = Array.isArray(record.items) ? record.items : [];
-      return {
-        run_id: asNumber(record.run_id) ?? index + 1,
-        model_version: asString(record.model_version) ?? "—",
-        requested_at: asString(record.requested_at) ?? "",
-        items: rawItems.map(normalizeItem),
-        clicks: asNumber(record.clicks) ?? 0,
-        purchases: asNumber(record.purchases) ?? 0,
-      };
-    }),
+    user_id: asString(record.profile_id) ?? "—",
+    client_id: asString(record.client_id) ?? "—",
+    runs: [],
   };
 }
 
 export async function createRun(
   config: RecsysConfig,
-  userId: string,
+  _userId: string,
 ): Promise<NewRunResponse> {
-  const query = new URLSearchParams({ user_id: userId });
-  const payload = await request<unknown>(config, `/recommendations/new?${query.toString()}`, {
-    method: "POST",
-  });
-  if (!isRecord(payload)) throw new RecsysError("Ответ /recommendations/new не является объектом");
-  const rawItems = Array.isArray(payload.items) ? payload.items : [];
+  // Явного пересчёта нет: достаточно обновить выдачу через /recommendations/me.
+  const payload = await request<unknown>(config, "/users/me", { method: "GET" });
+  const record = isRecord(payload) ? payload : {};
   return {
-    run_id: asNumber(payload.run_id) ?? 0,
-    client_id: asString(payload.client_id) ?? "—",
-    count: asNumber(payload.count) ?? rawItems.length,
-    items: rawItems.map(normalizeItem),
+    run_id: 0,
+    client_id: asString(record.client_id) ?? "—",
+    count: 0,
+    items: [],
   };
 }

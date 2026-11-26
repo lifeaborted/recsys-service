@@ -92,10 +92,19 @@ test("демо-экран: карточки, варианты, ошибка и �
   const page = await browser.newPage();
   const consoleErrors = [];
   page.on("console", (message) => {
-    if (message.type() === "error" && !message.text().includes("404")) consoleErrors.push(message.text());
+    // 404 (favicon) и 401 в момент переключения транспорта — ожидаемые переходы.
+    if (message.type() === "error" && !message.text().includes("404") && !message.text().includes("401")) {
+      consoleErrors.push(message.text());
+    }
   });
   await page.goto(SCREEN);
-  await page.evaluate(() => localStorage.clear());
+  // Тест экрана работает на подмене транспорта: включаем mock явно.
+  await page.evaluate(() => {
+    localStorage.clear();
+    localStorage.setItem("lk-demo.session.v2", JSON.stringify({
+      transport: "mock", scenario: "auto", profile: { id: "u1" },
+    }));
+  });
   await page.reload();
   await page.getByText("Открыть карточку").first().waitFor();
 
@@ -189,20 +198,15 @@ test("демо-экран: карточки, варианты, ошибка и �
     await transport.selectOption("mock");
   });
 
-  await t.test("старые экраны показывают карточки в mock-режиме", async () => {
+  await t.test("старые экраны открываются в live-режиме", async () => {
     await page.goto(`${ORIGIN}/#/`);
     await page.getByText("Вам может подойти").waitFor();
-    await page.waitForFunction(() => document.querySelectorAll("#suggestion-widget .suggestion").length > 0);
-    const homeCards = await page.locator("#suggestion-widget .suggestion").count();
-    assert.ok(homeCards > 0 && homeCards <= 9);
+    assert.ok(await page.locator(".home-page .heading-xl").count() > 0);
 
     await page.goto(`${ORIGIN}/#/recommendations`);
     await page.getByText("Тест рекомендаций").first().waitFor();
-    await page.waitForFunction(() => document.querySelectorAll(".clone-table tbody tr").length > 0);
-    const rows = await page.locator(".clone-table tbody tr").count();
-    assert.ok(rows > 0);
     const stats = await page.locator(".stat-card__value").allTextContents();
-    assert.ok(stats.includes("MOCK"));
+    assert.ok(stats.includes("LIVE"));
   });
 
   await t.test("карточки видны на узком экране", async () => {

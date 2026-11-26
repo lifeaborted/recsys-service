@@ -33,6 +33,12 @@ export function RecommendationsPage() {
   };
 
   const loadDb = useCallback(async () => {
+    if (!settings.token) {
+      setStats(null);
+      setRuns([]);
+      setClientId("—");
+      return;
+    }
     if (settings.mockMode) {
       setStats(null);
       setRuns([]);

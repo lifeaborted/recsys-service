@@ -5,13 +5,14 @@ import {
   useMemo,
   useState,
   useRef,
+  useEffect,
   type ReactNode,
 } from "react";
 import type { DemoScenario } from "../api/recsysTypes";
 import { login, type Transport } from "../api/recsysClient";
 import { readJson, removeKey, writeJson } from "../lib/storage";
 
-const STORAGE_KEY = "lk-demo.session.v1";
+const STORAGE_KEY = "lk-demo.session.v2";
 
 export interface DemoProfile {
   id: string;
@@ -27,6 +28,7 @@ export const DEMO_PROFILES: DemoProfile[] = [
 
 interface SessionState {
   profile: DemoProfile | null;
+  preferredId: string;
   error?: string;
   transport: Transport;
   scenario: DemoScenario;
@@ -45,10 +47,14 @@ const SessionContext = createContext<SessionContextValue | null>(null);
 
 function initialState(): SessionState {
   const stored = readJson<Partial<SessionState>>(STORAGE_KEY);
-  const profile = DEMO_PROFILES.find((item) => item.id === stored?.profile?.id) ?? DEMO_PROFILES[0];
+  const preferredId = stored?.profile?.id ?? "u1";
+  const transport: Transport = stored?.transport === "mock" ? "mock" : "http";
   return {
-    profile: stored?.transport === "http" ? null : profile,
-    transport: stored?.transport === "http" ? "http" : "mock",
+    profile: transport === "mock"
+      ? (DEMO_PROFILES.find((item) => item.id === preferredId) ?? DEMO_PROFILES[0])
+      : null,
+    preferredId,
+    transport,
     scenario: (stored?.scenario as DemoScenario) ?? "auto",
     generation: 0,
   };
@@ -84,6 +90,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       return next;
     });
   }, []);
+
+  // По умолчанию экран работает с реальным API: логинимся сразу при загрузке.
+  useEffect(() => {
+    if (state.transport === "http" && !state.profile && !state.error) {
+      void signIn(state.preferredId, "http");
+    }
+  }, [state.transport, state.profile, state.error, state.preferredId, signIn]);
 
   const loginAs = useCallback((id: string) => { void signIn(id, state.transport); }, [signIn, state.transport]);
 

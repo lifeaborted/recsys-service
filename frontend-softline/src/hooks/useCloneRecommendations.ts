@@ -3,13 +3,21 @@ import { sendFeedback } from "../api/client";
 import { mockFeedback } from "../api/mock";
 import type { FeedbackPayload, RecommendationItem, Scenario } from "../api/types";
 import { useDebug } from "../state/debug";
+import { useSession } from "../state/session";
 import { useSettings } from "../state/settings";
 import { useRecommendations } from "./useRecommendations";
 
 /** Общая точка входа: recommendation hook + отладка + обратная связь. */
 export function useCloneRecommendations() {
-  const { settings } = useSettings();
+  const { settings, update: updateSettings } = useSettings();
+  const session = useSession();
   const { update: updateDebug, setRerun } = useDebug();
+
+  // Старые экраны должны использовать ту же Bearer-сессию, что и демо-экран.
+  useEffect(() => {
+    const token = session.profile?.token;
+    if (token && token !== settings.token) updateSettings({ token });
+  }, [session.profile?.token, settings.token, updateSettings]);
   const state = useRecommendations({
     userId: settings.userId,
     scenario: settings.scenario,
@@ -25,7 +33,7 @@ export function useCloneRecommendations() {
         mode: settings.mockMode ? "mock" : "live",
         endpoint: settings.mockMode
           ? "mock://recommendations"
-          : `${settings.baseUrl.replace(/\/+$/, "")}/recommendations`,
+          : `${settings.baseUrl.replace(/\/+$/, "")}/recommendations/me`,
       },
       response: state.data,
       error: state.error,
