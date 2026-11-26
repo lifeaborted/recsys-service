@@ -23,6 +23,10 @@ SET row_security = off;
 
 CREATE SCHEMA IF NOT EXISTS "recommendations";
 
+DO $bootstrap$
+BEGIN
+IF to_regclass('recommendations.sales') IS NULL THEN
+
 SET default_tablespace = '';
 
 SET default_table_access_method = "heap";
@@ -670,73 +674,73 @@ COMMENT ON TABLE "recommendations"."validation_protocol" IS 'Excel: Проток
 -- Name: account_users_user_id_seq; Type: SEQUENCE SET; Schema: recommendations; Owner: -
 --
 
-SELECT pg_catalog.setval('"recommendations"."account_users_user_id_seq"', 3, true);
+PERFORM pg_catalog.setval('"recommendations"."account_users_user_id_seq"', 3, true);
 
 --
 -- Name: carts_cart_id_seq; Type: SEQUENCE SET; Schema: recommendations; Owner: -
 --
 
-SELECT pg_catalog.setval('"recommendations"."carts_cart_id_seq"', 1, true);
+PERFORM pg_catalog.setval('"recommendations"."carts_cart_id_seq"', 1, true);
 
 --
 -- Name: catalog_snapshots_id_seq; Type: SEQUENCE SET; Schema: recommendations; Owner: -
 --
 
-SELECT pg_catalog.setval('"recommendations"."catalog_snapshots_id_seq"', 1, true);
+PERFORM pg_catalog.setval('"recommendations"."catalog_snapshots_id_seq"', 1, true);
 
 --
 -- Name: catalog_vendors_vendor_id_seq; Type: SEQUENCE SET; Schema: recommendations; Owner: -
 --
 
-SELECT pg_catalog.setval('"recommendations"."catalog_vendors_vendor_id_seq"', 1234, true);
+PERFORM pg_catalog.setval('"recommendations"."catalog_vendors_vendor_id_seq"', 1234, true);
 
 --
 -- Name: licenses_license_id_seq; Type: SEQUENCE SET; Schema: recommendations; Owner: -
 --
 
-SELECT pg_catalog.setval('"recommendations"."licenses_license_id_seq"', 2, true);
+PERFORM pg_catalog.setval('"recommendations"."licenses_license_id_seq"', 2, true);
 
 --
 -- Name: order_deliveries_delivery_id_seq; Type: SEQUENCE SET; Schema: recommendations; Owner: -
 --
 
-SELECT pg_catalog.setval('"recommendations"."order_deliveries_delivery_id_seq"', 1, true);
+PERFORM pg_catalog.setval('"recommendations"."order_deliveries_delivery_id_seq"', 1, true);
 
 --
 -- Name: order_documents_document_id_seq; Type: SEQUENCE SET; Schema: recommendations; Owner: -
 --
 
-SELECT pg_catalog.setval('"recommendations"."order_documents_document_id_seq"', 1, true);
+PERFORM pg_catalog.setval('"recommendations"."order_documents_document_id_seq"', 1, true);
 
 --
 -- Name: order_invoices_invoice_id_seq; Type: SEQUENCE SET; Schema: recommendations; Owner: -
 --
 
-SELECT pg_catalog.setval('"recommendations"."order_invoices_invoice_id_seq"', 1, true);
+PERFORM pg_catalog.setval('"recommendations"."order_invoices_invoice_id_seq"', 1, true);
 
 --
 -- Name: order_payments_payment_id_seq; Type: SEQUENCE SET; Schema: recommendations; Owner: -
 --
 
-SELECT pg_catalog.setval('"recommendations"."order_payments_payment_id_seq"', 1, true);
+PERFORM pg_catalog.setval('"recommendations"."order_payments_payment_id_seq"', 1, true);
 
 --
 -- Name: recommendation_events_event_id_seq; Type: SEQUENCE SET; Schema: recommendations; Owner: -
 --
 
-SELECT pg_catalog.setval('"recommendations"."recommendation_events_event_id_seq"', 2, true);
+PERFORM pg_catalog.setval('"recommendations"."recommendation_events_event_id_seq"', 2, true);
 
 --
 -- Name: recommendation_runs_run_id_seq; Type: SEQUENCE SET; Schema: recommendations; Owner: -
 --
 
-SELECT pg_catalog.setval('"recommendations"."recommendation_runs_run_id_seq"', 1, true);
+PERFORM pg_catalog.setval('"recommendations"."recommendation_runs_run_id_seq"', 1, true);
 
 --
 -- Name: store_order_items_order_item_id_seq; Type: SEQUENCE SET; Schema: recommendations; Owner: -
 --
 
-SELECT pg_catalog.setval('"recommendations"."store_order_items_order_item_id_seq"', 1, true);
+PERFORM pg_catalog.setval('"recommendations"."store_order_items_order_item_id_seq"', 1, true);
 
 --
 -- Name: account_memberships account_memberships_pkey; Type: CONSTRAINT; Schema: recommendations; Owner: -
@@ -1432,3 +1436,9 @@ ALTER TABLE ONLY "recommendations"."store_order_items"
 --
 -- PostgreSQL database dump complete
 --
+
+END IF;
+END
+$bootstrap$;
+
+SELECT pg_catalog.set_config('search_path', '"$user", public', false);

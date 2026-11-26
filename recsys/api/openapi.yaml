@@ -2,7 +2,7 @@ openapi: 3.0.3
 info:
   title: Softline Recommendations API
   version: 0.1.0
-  description: Draft contract. Only the readiness route is implemented in the scaffold.
+  description: HTTP API for personal-account (ЛК) sessions, catalog products, isolated online purchases, and recommendations.
 servers:
   - url: /api/v1
 security:
@@ -15,8 +15,29 @@ paths:
       responses:
         '200':
           description: Database and schema are ready
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/XRequestID'
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: {type: string, enum: [ok]}
+                  schema_version: {type: string}
         '503':
           description: Database or schema is unavailable
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/XRequestID'
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: {type: string, enum: [not_ready]}
   /auth/register:
     post:
       operationId: register
@@ -27,6 +48,7 @@ paths:
           application/json:
             schema:
               type: object
+              additionalProperties: false
               required: [login, password, client_group]
               properties:
                 login: {type: string}
@@ -36,10 +58,31 @@ paths:
       responses:
         '201':
           description: Demo account created
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/XRequestID'
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [profile_id, client_group, access_token, expires_at]
+                properties:
+                  profile_id: {type: string}
+                  client_group: {$ref: '#/components/schemas/ClientGroup'}
+                  access_token: {type: string}
+                  expires_at: {type: string, format: date-time}
         '400':
           description: Invalid registration data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '409':
           description: Login already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /auth/login:
     post:
       operationId: login
@@ -50,6 +93,7 @@ paths:
           application/json:
             schema:
               type: object
+              additionalProperties: false
               required: [login, password]
               properties:
                 login: {type: string}
@@ -57,6 +101,9 @@ paths:
       responses:
         '200':
           description: Demo session created
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/XRequestID'
           content:
             application/json:
               schema:
@@ -65,14 +112,28 @@ paths:
                 properties:
                   access_token: {type: string}
                   expires_at: {type: string, format: date-time}
+                  profile_id: {type: string}
+        '400':
+          description: Invalid login payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '401':
           description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /users/me:
     get:
       operationId: getCurrentUser
       responses:
         '200':
           description: Current profile
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/XRequestID'
           content:
             application/json:
               schema:
@@ -80,7 +141,10 @@ paths:
                 required: [profile_id, client_group]
                 properties:
                   profile_id: {type: string}
+                  client_id: {type: string}
                   client_group: {$ref: '#/components/schemas/ClientGroup'}
+                  industry: {type: string}
+                  login: {type: string}
         '401':
           $ref: '#/components/responses/Unauthorized'
   /products:
@@ -93,8 +157,24 @@ paths:
       responses:
         '200':
           description: Page of catalog products
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/XRequestID'
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: {$ref: '#/components/schemas/Product'}
         '400':
           description: Invalid limit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '401':
           $ref: '#/components/responses/Unauthorized'
   /purchases:
@@ -113,25 +193,59 @@ paths:
       responses:
         '201':
           description: Demo purchase recorded for the current profile
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/XRequestID'
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [order_id, item_id]
+                properties:
+                  order_id: {type: string}
+                  item_id: {type: string}
+                  offer_id: {type: string}
         '400':
           description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
           description: Unknown item
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /recommendations/me:
     get:
       operationId: getCurrentRecommendations
       responses:
         '200':
           description: Recommendations for the session profile
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/XRequestID'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Recommendations'
+        '400':
+          description: Profile override is forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '401':
           $ref: '#/components/responses/Unauthorized'
 components:
+  headers:
+    XRequestID:
+      description: Request correlation identifier returned on both success and error responses
+      schema:
+        type: string
   securitySchemes:
     bearerAuth:
       type: http
@@ -139,6 +253,9 @@ components:
   responses:
     Unauthorized:
       description: Missing or invalid session
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/XRequestID'
       content:
         application/json:
           schema:
@@ -158,6 +275,20 @@ components:
           properties:
             code: {type: string}
             message: {type: string}
+    Product:
+      type: object
+      required: [item_id, sku, title, category, vendor, available]
+      properties:
+        item_id: {type: string}
+        offer_id: {type: string}
+        sku: {type: string, nullable: true}
+        title: {type: string}
+        category: {type: string}
+        vendor: {type: string}
+        price: {type: number}
+        currency_code: {type: string}
+        available: {type: boolean}
+        url: {type: string, format: uri}
     Recommendations:
       type: object
       required: [request_id, snapshot_id, partial_reason, items, graph]

@@ -16,3 +16,9 @@ recommendations.sql
 !internal/**/testdata/**
 !tests/**/testdata/**
 /tests/e2e/data/HANDOFF.md
+
+recommendations*.sql
+*.pgdump
+*.db
+*.sqlite
+*.sqlite3

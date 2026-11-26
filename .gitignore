@@ -27,3 +27,14 @@ recsys/bin/
 
 # Local-only handoff notes (kept out of git repository)
 recsys/tests/e2e/data/HANDOFF.md
+
+*.env
+recommendations*.sql
+*.pgdump
+*.bak
+*.db
+*.sqlite
+*.sqlite3
+.obsidian/
+.idea/
+.vscode/
