@@ -129,7 +129,7 @@ curl.exe "http://localhost:8080/api/v1/recommendations?user_id=u1&limit=9"
 
 | Переменная | По умолчанию | Что задаёт |
 |------------|--------------|------------|
-| `RECSYS_ADDR` | `127.0.0.1:8080` | адрес Go API |
+| `RECSYS_ADDR` | `localhost:8080` | адрес Go API |
 | `RECSYS_DATABASE_URL` | `postgres://postgres:postgres@localhost:5432/recsys?sslmode=disable` | подключение к БД |
 | `RECSYS_MOCK` | выключен | `1`/`true` — отвечать синтетикой из `api/examples` |
 | `RECSYS_EXAMPLES_DIR` | `api/examples` | каталог примеров |
@@ -151,6 +151,7 @@ go test ./...
 # Фронтенд
 cd ..\frontend-softline
 npm run build
+npm run test:e2e:demo     # браузерный тест экрана, нужен запущенный npm run dev
 ```
 
 Подробные шаги и результаты — в `recsys/docs/demo/README.md` и
