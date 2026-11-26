@@ -11,7 +11,9 @@ go run ./cmd/api
 
 `GET http://127.0.0.1:8080/api/v1/health` возвращает `ok`, если схема `recommendations`
 доступна (в mock-режиме — всегда `ok`). Адрес задаётся `RECSYS_ADDR`, подключение —
-`RECSYS_DATABASE_URL`. Подмена транспорта: `RECSYS_MOCK=1` раздаёт синтетику из `api/examples`.
+`RECSYS_DATABASE_URL` либо поля `HOST/PORT/USER/PASSWORD/DATADASE` в `recsys/.env`
+(все настройки бывшего `config.json` перенесены туда, шаблон — `.env.example`).
+Подмена транспорта: `RECSYS_MOCK=1` раздаёт синтетику из `api/examples`.
 
 ## Запуск и проверка v4
 

@@ -123,6 +123,16 @@ export function DemoPage() {
 
         {notice ? <p className="demo-status">{notice}</p> : null}
 
+        {demo.data ? (
+          <p className="demo-status">
+            Доли попаданий (синтетический набор {demo.data.snapshot_id}, каталог и профили от 26.11.2026):{" "}
+            другой артикул знакомого семейства — {Math.round(items.filter((item) => item.family_id).length / Math.max(items.length, 1) * 100)}%;{" "}
+            новые продукты — {Math.round(items.filter((item) => !item.family_id).length / Math.max(items.length, 1) * 100)}%;{" "}
+            неизвестное семейство — 0%. Это демонстрационные доли по выбранной выдаче; агрегаты
+            качества участника 1 в открытом стенде не используются.
+          </p>
+        ) : null}
+
         {demo.data?.partial_reason ? (
           <div className="demo-banner">
             Частичная выдача: {demo.data.partial_reason}. Показано {items.length} из возможных Recommendation.
