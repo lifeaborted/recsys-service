@@ -77,6 +77,13 @@ async function serverUp() {
 
 const up = await serverUp();
 const executablePath = findBrowser();
+let apiUp = false;
+try {
+  const response = await fetch("http://localhost:8080/api/v1/health", { signal: AbortSignal.timeout(2000) });
+  apiUp = response.ok;
+} catch {
+  apiUp = false;
+}
 
 test("демо-экран: карточки, варианты, ошибка и смена профиля", { skip: !up || !executablePath ? "нужны Vite и браузер в PATH (или CHROME_PATH)" : false }, async (t) => {
   const browser = await chromium.launch({ executablePath, headless: true, args: ["--no-sandbox"] });
@@ -108,6 +115,13 @@ test("демо-экран: карточки, варианты, ошибка и �
     assert.ok(variants.some((text) => text.includes("12 мес.")));
     assert.ok(variants.some((text) => text.includes("24 мес.")));
     assert.ok(variants.some((text) => text.includes("Срок окончания неизвестен")));
+    assert.ok(variants.some((text) => /synthetic-(offer|unknown)-/.test(text)), "источник отличия должен быть показан");
+
+    const hrefs = await page.locator(".demo-card a.demo-card__link").evaluateAll(
+      (links) => links.map((link) => link.getAttribute("href")),
+    );
+    assert.ok(hrefs.length >= 3, "у каждой карточки должна быть доступная ссылка");
+    assert.ok(hrefs.every((href) => href && href.startsWith("http")));
   });
 
   await t.test("объяснение раскрывает только связанное ребро", async () => {
@@ -145,6 +159,19 @@ test("демо-экран: карточки, варианты, ошибка и �
     assert.match(status, /u2/);
     assert.match(status, /demo-1/);
     assert.doesNotMatch(status, /demo-full-1/);
+  });
+
+  await t.test("HTTP-транспорт через собственный Go API", { skip: !apiUp ? "Go API не запущен" : false }, async () => {
+    const transport = page.locator("select").nth(1);
+    await profile.selectOption("u1");
+    await scenario.selectOption("auto");
+    await transport.selectOption("http");
+    await page.waitForFunction(() => document.querySelectorAll(".demo-card").length > 0);
+    const cards = await page.locator(".demo-card").count();
+    assert.ok(cards > 0 && cards <= 3);
+    const status = await page.locator(".demo-status").first().textContent();
+    assert.match(status, /request_id/);
+    await transport.selectOption("mock");
   });
 
   await t.test("главная и страница проверки БД показывают карточки", async () => {

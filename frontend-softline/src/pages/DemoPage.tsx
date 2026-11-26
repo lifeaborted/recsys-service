@@ -125,10 +125,11 @@ export function DemoPage() {
 
         {demo.data ? (
           <p className="demo-status">
-            Разбивка выдачи (синтетика {demo.data.snapshot_id}, каталог и профили от 26.11.2026):{" "}
-            другой артикул знакомого семейства — {items.filter((item) => item.family_id).length}/{items.length};
-            новые продукты — {items.filter((item) => !item.family_id).length}/{items.length};
-            неизвестное семейство — 0/{items.length}. Агрегаты качества участника 1 не используются.
+            Доли попаданий (синтетический набор {demo.data.snapshot_id}, каталог и профили от 26.11.2026):{" "}
+            другой артикул знакомого семейства — {Math.round(items.filter((item) => item.family_id).length / Math.max(items.length, 1) * 100)}%;{" "}
+            новые продукты — {Math.round(items.filter((item) => !item.family_id).length / Math.max(items.length, 1) * 100)}%;{" "}
+            неизвестное семейство — 0%. Это демонстрационные доли по выбранной выдаче; агрегаты
+            качества участника 1 в открытом стенде не используются.
           </p>
         ) : null}
 
