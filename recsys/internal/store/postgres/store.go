@@ -93,6 +93,11 @@ func (s *Store) seedBaseline(ctx context.Context, clientID string) error {
 	if err != nil {
 		return err
 	}
+	// Параллельные запросы не должны создавать/возвращать один и тот же run.
+	if _, err := tx.ExecContext(ctx, "SELECT pg_advisory_xact_lock(hashtext($1))", clientID); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
 	var runID int64
 	err = tx.QueryRowContext(ctx, `
 		INSERT INTO recommendations.recommendation_runs (client_id, model_version)

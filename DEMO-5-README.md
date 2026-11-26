@@ -142,6 +142,8 @@ curl.exe "http://localhost:8080/api/v1/recommendations?user_id=u1&limit=9"
 # Контракт примеров (без Go-сервера)
 cd recsys
 node --test tests/e2e/demo/contract.test.mjs     # 8 тестов, все PASS
+node --test tests/e2e/demo/api.test.mjs          # 6 тестов на запущенном API
+go run ./tools/checkdb                           # целостность данных
 
 # Go
 go build ./...

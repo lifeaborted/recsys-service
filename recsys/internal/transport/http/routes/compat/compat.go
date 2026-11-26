@@ -39,9 +39,12 @@ func (h *Handler) Recommendations(w http.ResponseWriter, r *http.Request) {
 	}
 	limit := 9
 	if raw := r.URL.Query().Get("limit"); raw != "" {
-		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 && parsed <= 50 {
-			limit = parsed
+		parsed, err := strconv.Atoi(raw)
+		if err != nil || parsed < 1 || parsed > 50 {
+			respond.Error(w, http.StatusBadRequest, "bad-limit", "invalid_input", "limit must be 1..50")
+			return
 		}
+		limit = parsed
 	}
 
 	var requestID, modelVersion string

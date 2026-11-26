@@ -1,27 +1,74 @@
 // Браузерный тест демо-экрана (05-DEMO, п. «Проверка и передача»).
 // Требует запущенный Vite: npm run dev. HTTP подменён синтетикой — Go API не нужен.
+// Адрес экрана: FRONTEND_URL (по умолчанию http://localhost:5173).
+// Браузер: CHROME_PATH или любой chrome/chromium/msedge в PATH.
 //   npm run test:e2e:demo
 import test from "node:test";
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { chromium } from "playwright-core";
 
-const SCREEN = "http://localhost:5173/#/demo";
-const CHROME_CANDIDATES = [
-  process.env.CHROME_PATH,
-  "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
-  "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
-  "/usr/bin/google-chrome",
-  "/usr/bin/chromium",
-].filter(Boolean);
+const ORIGIN = (process.env.FRONTEND_URL ?? "http://localhost:5173").replace(/\/$/, "");
+const SCREEN = `${ORIGIN}/#/demo`;
 
-function chromePath() {
-  return CHROME_CANDIDATES.find((path) => existsSync(path));
+function findBrowser() {
+  if (process.env.CHROME_PATH) return process.env.CHROME_PATH;
+
+  const names = process.platform === "win32"
+    ? ["chrome.exe", "msedge.exe", "chromium.exe"]
+    : ["google-chrome", "chromium", "chromium-browser", "microsoft-edge"];
+  const finder = process.platform === "win32" ? "where.exe" : "which";
+
+  for (const name of names) {
+    try {
+      const output = execFileSync(finder, [name], {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+      });
+      const candidate = output.split(/\r?\n/).map((line) => line.trim()).find(Boolean);
+      if (candidate && existsSync(candidate)) return candidate;
+    } catch {
+      // браузер с таким именем не найден — пробуем следующий
+    }
+  }
+
+  if (process.platform === "win32") {
+    // Chrome/Edge не обязательно лежат в PATH; спросим реестр Windows.
+    for (const key of [
+      "HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\chrome.exe",
+      "HKLM\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\App Paths\\chrome.exe",
+      "HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\chrome.exe",
+      "HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\msedge.exe",
+      "HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\msedge.exe",
+    ]) {
+      try {
+        const output = execFileSync("reg.exe", ["query", key, "/ve"], {
+          encoding: "utf8",
+          stdio: ["ignore", "pipe", "ignore"],
+        });
+        for (const line of output.split(/\r?\n/)) {
+          const candidate = line.split(/\s+REG_SZ\s+/)[1]?.trim();
+          if (candidate && existsSync(candidate)) return candidate;
+        }
+      } catch {
+        // ключ отсутствует — пробуем следующий
+      }
+    }
+  }
+
+  try {
+    const candidate = chromium.executablePath();
+    if (candidate && existsSync(candidate)) return candidate;
+  } catch {
+    // playwright-core не скачивал браузер — значит используем системный
+  }
+  return undefined;
 }
 
 async function serverUp() {
   try {
-    const response = await fetch("http://localhost:5173/", { signal: AbortSignal.timeout(2000) });
+    const response = await fetch(ORIGIN, { signal: AbortSignal.timeout(2000) });
     return response.ok;
   } catch {
     return false;
@@ -29,9 +76,9 @@ async function serverUp() {
 }
 
 const up = await serverUp();
-const executablePath = chromePath();
+const executablePath = findBrowser();
 
-test("демо-экран: карточки, варианты, ошибка и смена профиля", { skip: !up || !executablePath ? "нужны Vite и Chrome" : false }, async (t) => {
+test("демо-экран: карточки, варианты, ошибка и смена профиля", { skip: !up || !executablePath ? "нужны Vite и браузер в PATH (или CHROME_PATH)" : false }, async (t) => {
   const browser = await chromium.launch({ executablePath, headless: true, args: ["--no-sandbox"] });
   t.after(() => browser.close());
 
@@ -98,6 +145,30 @@ test("демо-экран: карточки, варианты, ошибка и �
     assert.match(status, /u2/);
     assert.match(status, /demo-1/);
     assert.doesNotMatch(status, /demo-full-1/);
+  });
+
+  await t.test("главная и страница проверки БД показывают карточки", async () => {
+    await page.goto(`${ORIGIN}/#/`);
+    await page.getByText("Вам может подойти").waitFor();
+    await page.waitForFunction(() => document.querySelectorAll("#suggestion-widget .suggestion").length > 0);
+    const homeCards = await page.locator("#suggestion-widget .suggestion").count();
+    assert.ok(homeCards > 0 && homeCards <= 3);
+
+    await page.goto(`${ORIGIN}/#/recommendations`);
+    await page.getByText("Тест рекомендаций").first().waitFor();
+    await page.waitForFunction(() => document.querySelectorAll(".clone-table tbody tr").length > 0);
+    const rows = await page.locator(".clone-table tbody tr").count();
+    assert.ok(rows > 0);
+    const stats = await page.locator(".stat-card__value").allTextContents();
+    assert.ok(stats.includes("LIVE"));
+  });
+
+  await t.test("карточки видны на узком экране", async () => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(SCREEN);
+    await page.getByText("Открыть карточку").first().waitFor();
+    const boxes = await page.locator(".demo-card").first().boundingBox();
+    assert.ok(boxes && boxes.width > 0 && boxes.width <= 390);
   });
 
   await t.test("консоль без ошибок приложения", async () => {
