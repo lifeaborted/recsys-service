@@ -18,15 +18,17 @@ func pools(c domain.Client, history []domain.ItemID, mode contract.Mode) []pool 
 		add := func(signal string, tier int, kind domain.RecommendationKind) {
 			result = append(result, pool{contract.CandidateKey{Signal: signal, SourceItemID: id}, tier, kind})
 		}
-		if c.Group == domain.B2B {
-			add("renewal", 10, domain.Renewal)
-			add("upgrade", 9, domain.Upgrade)
-			add("transition", 9, domain.Behavioral)
-		} else {
-			add("complement", 10, domain.Complement)
+		add("renewal", 10, domain.Renewal)
+		add("upgrade", 9, domain.Upgrade)
+		add("transition", 9, domain.Behavioral)
+		if c.Group != domain.B2B {
+			add("complement", 9, domain.Complement)
 		}
 		add("jaccard", 8, domain.Behavioral)
 		add("basket", 7, domain.Behavioral)
+		if c.Group == domain.B2B {
+			add("complement", 6, domain.Complement)
+		}
 	}
 	for _, key := range signals.PopulationKeys(c) {
 		tier := 2

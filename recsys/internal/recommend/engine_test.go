@@ -159,6 +159,25 @@ func checkGraph(t *testing.T, r contract.RecommendationResult) {
 	}
 }
 
+func TestB2BSoloUsesCatalogComplement(t *testing.T) {
+	m := &memory{
+		client:   domain.Client{ID: "u", Group: domain.B2B},
+		history:  []domain.Sale{{ItemID: "solo"}},
+		products: map[domain.ItemID]Product{"solo": {Platform: "linux"}},
+		sets:     map[contract.CandidateKey][]domain.Candidate{},
+	}
+	offer := "addon"
+	m.products["addon"] = Product{OfferID: &offer, Available: true, Audience: domain.B2B, Title: "Модуль"}
+	m.add(contract.CandidateKey{Signal: "complement", SourceItemID: "solo"}, "addon")
+	m.add(contract.CandidateKey{Signal: "popularity", ClientGroup: domain.B2B}, "noise")
+	noise := "noise"
+	m.products["noise"] = Product{OfferID: &noise, Available: true, Audience: domain.B2B}
+	r, err := New(m).Recommend(context.Background(), contract.RecommendationQuery{ClientID: "u", Mode: contract.Online})
+	if err != nil || len(r.Items) == 0 || r.Items[0].Kind != domain.Complement || r.Items[0].ItemID != "addon" {
+		t.Fatalf("catalog complement must outrank group popularity: %+v %v", r.Items, err)
+	}
+}
+
 func TestRefillAfterFilters(t *testing.T) {
 	m := &memory{client: domain.Client{ID: "u", Group: domain.B2C}, history: []domain.Sale{{ItemID: "base"}}, sets: map[contract.CandidateKey][]domain.Candidate{}, products: map[domain.ItemID]Product{"base": {Platform: "linux"}}}
 	for i := 0; i < 67; i++ {
