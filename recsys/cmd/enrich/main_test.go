@@ -207,3 +207,70 @@ func TestSemanticSearch(t *testing.T) {
 		}
 	})
 }
+
+func TestProposeRelation(t *testing.T) {
+	const quote = "You can move from Demo Basic to Demo Standard."
+	cases := []struct {
+		name, content, status string
+		unapproved            bool
+	}{
+		{name: "supported", content: `{"kind":"upgrade","quote":"You can move from Demo Basic to Demo Standard."}`, status: "review"},
+		{name: "no relation", content: `{"kind":"none","quote":""}`, status: "no_relation"},
+		{name: "fabricated quote", content: `{"kind":"upgrade","quote":"Upgrade to Ultimate."}`},
+		{name: "missing product", content: `{"kind":"upgrade","quote":"from Demo Basic"}`},
+		{name: "unexpected field", content: `{"kind":"none","quote":"","relations":[]}`},
+		{name: "source approval", unapproved: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if tc.unapproved || r.URL.Path != "/v1/chat/completions" {
+					t.Error("unexpected chat request")
+				}
+				json.NewEncoder(w).Encode(map[string]any{
+					"model": "test-chat",
+					"choices": []any{map[string]any{
+						"message": map[string]string{"content": tc.content},
+					}},
+				})
+			}))
+			defer provider.Close()
+			t.Setenv("LLM_BASE_URL", provider.URL+"/v1")
+			t.Setenv("LLM_MODEL", "test-chat")
+			t.Setenv("LLM_API_KEY", "")
+			input := explain.RelationInput{From: "Demo Basic", To: "Demo Standard", Source: explain.PublicText{
+				Text: quote, SourceURL: "https://example.com/demo", Version: "demo-v1", Approved: !tc.unapproved,
+			}}
+			path := filepath.Join(t.TempDir(), "request.json")
+			raw, err := json.Marshal(input)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(path, raw, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			var output bytes.Buffer
+			err = run(t.Context(), []string{"-propose-relation", path}, &output, io.Discard)
+			if tc.status == "" {
+				if err == nil || output.Len() != 0 {
+					t.Fatalf("expected rejection with no output, got %v and %q", err, output.String())
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			var result explain.RelationProposal
+			if err := json.Unmarshal(output.Bytes(), &result); err != nil {
+				t.Fatal(err)
+			}
+			if result.Status != tc.status || result.Model != "test-chat" || result.SourceURL != input.Source.SourceURL ||
+				result.InputHash == "" || result.PromptVersion == "" {
+				t.Fatalf("unexpected proposal %+v", result)
+			}
+			if tc.status == "review" && (result.Kind != "upgrade" || result.Quote != quote) {
+				t.Fatalf("unexpected reviewed candidate %+v", result)
+			}
+		})
+	}
+}

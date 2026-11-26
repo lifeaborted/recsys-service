@@ -40,8 +40,26 @@ func run(ctx context.Context, args []string, output, diagnostics io.Writer) erro
 	card := flags.String("card", "", "optional item ID for explanation")
 	publicPath := flags.String("public-text", "", "optional approved public excerpt JSON for chat ordering")
 	searchPath := flags.String("semantic-search", "", "optional JSON approving feed names and per-item queries for embeddings")
+	proposalPath := flags.String("propose-relation", "", "extract a relation proposal from one approved source JSON")
 	if err := flags.Parse(args); err != nil {
 		return err
+	}
+	if *proposalPath != "" {
+		onlyProposal := flags.NFlag() == 1 && flags.NArg() == 0
+		if !onlyProposal {
+			return fmt.Errorf("propose-relation runs on its own")
+		}
+		var input explain.RelationInput
+		if err := readJSON(*proposalPath, &input); err != nil {
+			return err
+		}
+		proposal, err := explain.ChatFromEnv().ProposeRelation(ctx, input)
+		if err != nil {
+			return err
+		}
+		encoder := json.NewEncoder(output)
+		encoder.SetIndent("", "  ")
+		return encoder.Encode(proposal)
 	}
 	if flags.NArg() != 0 || *path == "" || *itemsPath == "" || *version == "" || *sourceURL == "" || *snapshot == "" {
 		flags.Usage()
