@@ -45,7 +45,7 @@ func run() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 
-	if err := ensureDatabase(ctx, cfg.DatabaseURL); err != nil {
+	if err := ensureDatabase(ctx, cfg.DatabaseURL, cfg.MaintenanceDB); err != nil {
 		return err
 	}
 
@@ -76,7 +76,7 @@ func run() error {
 		return nil
 	}
 
-	m := migrate.New(db, "migrations", "schema_migrations", "recommendations")
+	m := migrate.New(db, cfg.MigrationsDir, cfg.MigrationsTable, cfg.Schema)
 	if err := m.Init(ctx); err != nil {
 		return err
 	}
@@ -92,13 +92,13 @@ func run() error {
 	}
 }
 
-func ensureDatabase(ctx context.Context, targetDSN string) error {
+func ensureDatabase(ctx context.Context, targetDSN, maintenanceDB string) error {
 	parsed, err := url.Parse(targetDSN)
 	if err != nil {
 		return err
 	}
 	maintenance := *parsed
-	maintenance.Path = "/postgres"
+	maintenance.Path = "/" + maintenanceDB
 
 	admin, err := sql.Open("postgres", maintenance.String())
 	if err != nil {

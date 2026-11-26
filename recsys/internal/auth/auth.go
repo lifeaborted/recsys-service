@@ -18,12 +18,28 @@ type Profile struct {
 type contextKey struct{}
 
 var (
-	mu       sync.Mutex
-	profiles = map[string]Profile{
+	mu               sync.Mutex
+	fallbackClientID string
+	profiles         = map[string]Profile{
 		"demo-token-u1": {ID: "u1", ClientID: "DEMO-B2B", Group: "B2B", Login: "demo-b2b"},
 		"demo-token-u2": {ID: "u2", ClientID: "DEMO-B2C", Group: "B2C", Login: "demo-b2c"},
 	}
 )
+
+// Configure применяет соответствия профилей клиентам БД из конфига.
+func Configure(clientIDs map[string]string, fallback string) {
+	mu.Lock()
+	defer mu.Unlock()
+	fallbackClientID = fallback
+	for token, profile := range profiles {
+		if clientID := clientIDs[profile.ID]; clientID != "" {
+			profile.ClientID = clientID
+		} else if fallback != "" {
+			profile.ClientID = fallback
+		}
+		profiles[token] = profile
+	}
+}
 
 // Register создаёт демо-профиль. Возвращает false при занятом логине.
 func Register(login, password, group string) (Profile, string, bool) {
@@ -37,9 +53,13 @@ func Register(login, password, group string) (Profile, string, bool) {
 			return Profile{}, "", false
 		}
 	}
+	clientID := fallbackClientID
+	if clientID == "" {
+		clientID = "DEMO-" + group
+	}
 	profile := Profile{
 		ID:       "reg-" + login,
-		ClientID: "DEMO-" + group,
+		ClientID: clientID,
 		Group:    group,
 		Login:    login,
 	}

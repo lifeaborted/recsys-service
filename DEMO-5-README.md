@@ -120,6 +120,13 @@ curl.exe "http://localhost:8080/api/v1/recommendations?user_id=u1&limit=9"
 
 ## 7. Переменные окружения
 
+Настройки лежат в `recsys/.env` (файл в `.gitignore`, не коммитится). Туда перенесены
+все поля старого `config.json`: `HOST`, `PORT`, `USER`, `PASSWORD`, `DATADASE`, `SSLMODE`,
+`MAINTENANCE_DB`, `SCHEMA`, `MIGRATIONS_DIR`, `MIGRATIONS_TABLE`, `RECSYS_ADDR`,
+`API_MODEL_VERSION`, `API_FALLBACK_CLIENT_ID`, `API_USER_U1/U2/U3_CLIENT_ID`,
+`RECSYS_EXAMPLES_DIR`, `RECSYS_MOCK`. Переменные окружения имеет приоритет над файлом.
+Можно вместо полей задать сразу `RECSYS_DATABASE_URL`.
+
 | Переменная | По умолчанию | Что задаёт |
 |------------|--------------|------------|
 | `RECSYS_ADDR` | `127.0.0.1:8080` | адрес Go API |

@@ -40,11 +40,20 @@ func main() {
 			logger.Error("failed to open database", "error", err)
 			os.Exit(1)
 		}
+		store.SetModelVersion(cfg.ModelVersion)
 		defer store.Close()
 	}
 
+	clientIDs := make(map[string]string, len(cfg.Users))
+	for id, mapping := range cfg.Users {
+		clientIDs[id] = mapping.ClientID
+	}
+	auth.Configure(clientIDs, cfg.FallbackClientID)
+
 	recs := &recommendations.Handler{Store: store, ExamplesDir: cfg.ExamplesDir, Mock: cfg.Mock}
-	legacy := &compat.Handler{Store: store, ExamplesDir: cfg.ExamplesDir, Mock: cfg.Mock}
+	legacy := &compat.Handler{
+		Store: store, ExamplesDir: cfg.ExamplesDir, Mock: cfg.Mock, ModelVersion: cfg.ModelVersion,
+	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/v1/health", health.Get(store, cfg.Mock))

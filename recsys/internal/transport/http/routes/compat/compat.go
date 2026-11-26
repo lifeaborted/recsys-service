@@ -17,9 +17,10 @@ import (
 )
 
 type Handler struct {
-	Store       *postgres.Store
-	ExamplesDir string
-	Mock        bool
+	Store        *postgres.Store
+	ExamplesDir  string
+	Mock         bool
+	ModelVersion string
 }
 
 func (h *Handler) profileFor(userID string) auth.Profile {
@@ -70,7 +71,7 @@ func (h *Handler) Recommendations(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		requestID = example.RequestID
-		modelVersion = "go-mock-1.0"
+		modelVersion = h.ModelVersion
 		for i, item := range example.Items {
 			if i >= limit {
 				break
@@ -149,7 +150,7 @@ func (h *Handler) Stats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	respond.JSON(w, http.StatusOK, map[string]any{
-		"status": "ok", "model_version": "go-baseline-1.0", "tables": counts,
+		"status": "ok", "model_version": h.ModelVersion, "tables": counts,
 	})
 }
 

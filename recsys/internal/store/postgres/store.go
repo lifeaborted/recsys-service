@@ -43,7 +43,8 @@ type RunInfo struct {
 }
 
 type Store struct {
-	db *sql.DB
+	db           *sql.DB
+	modelVersion string
 }
 
 func Open(dsn string) (*Store, error) {
@@ -51,7 +52,14 @@ func Open(dsn string) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Store{db: db}, nil
+	return &Store{db: db, modelVersion: "demo-popularity-v4"}, nil
+}
+
+// SetModelVersion задаёт версию модели из конфига стенда.
+func (s *Store) SetModelVersion(version string) {
+	if version != "" {
+		s.modelVersion = version
+	}
 }
 
 func (s *Store) Close() error { return s.db.Close() }
@@ -88,9 +96,9 @@ func (s *Store) seedBaseline(ctx context.Context, clientID string) error {
 	var runID int64
 	err = tx.QueryRowContext(ctx, `
 		INSERT INTO recommendations.recommendation_runs (client_id, model_version)
-		VALUES ($1, 'demo-popularity-v4')
+		VALUES ($1, $2)
 		RETURNING run_id
-	`, clientID).Scan(&runID)
+	`, clientID, s.modelVersion).Scan(&runID)
 	if err != nil {
 		_ = tx.Rollback()
 		return err
@@ -201,7 +209,7 @@ func (s *Store) runItems(ctx context.Context, runID int64, limit int) ([]Item, e
 }
 
 func (s *Store) Recommend(ctx context.Context, clientID string, limit int) (Result, error) {
-	result := Result{ClientID: clientID, ModelVersion: "demo-popularity-v4", GeneratedAt: time.Now().UTC()}
+	result := Result{ClientID: clientID, ModelVersion: s.modelVersion, GeneratedAt: time.Now().UTC()}
 	runID, version, at, err := s.latestRun(ctx, clientID)
 	if err == sql.ErrNoRows {
 		if err := s.seedBaseline(ctx, clientID); err != nil {
