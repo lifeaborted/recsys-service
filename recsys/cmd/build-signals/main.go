@@ -37,7 +37,14 @@ func (p fileWriter) PublishSnapshot(ctx context.Context, s contract.Snapshot) er
 func run() error {
 	in := flag.String("input", "", "input JSON containing Snapshot metadata and Data (DatasetBatch)")
 	out := flag.String("output", "", "destination snapshot JSON")
+	database, snapshot, dataset, cutoff, evidence := registerDatabaseFlags()
 	flag.Parse()
+	if *database {
+		if *in != "" || *out != "" {
+			return fmt.Errorf("database mode does not take -input or -output")
+		}
+		return runDatabase(context.Background(), *snapshot, *dataset, *cutoff, *evidence)
+	}
 	if *in == "" || *out == "" {
 		return fmt.Errorf("supply -input and -output")
 	}

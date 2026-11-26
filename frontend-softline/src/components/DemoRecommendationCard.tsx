@@ -4,7 +4,8 @@ import type { GraphEdge, Recommendation, Variant } from "../api/recsysTypes";
 interface DemoRecommendationCardProps {
   item: Recommendation;
   edges: GraphEdge[];
-  onFeedback: (itemId: string, action: "click" | "purchase") => void;
+  onPurchase: (itemId: string) => void;
+  busy: boolean;
 }
 
 const KIND_LABELS: Record<Recommendation["recommendation_kind"], string> = {
@@ -29,7 +30,7 @@ function expiryOf(variant: Variant): string | null {
   return `до ${String(difference.value)}`;
 }
 
-export function DemoRecommendationCard({ item, edges, onFeedback }: DemoRecommendationCardProps) {
+export function DemoRecommendationCard({ item, edges, onPurchase, busy }: DemoRecommendationCardProps) {
   const [showVariants, setShowVariants] = useState(false);
   const [showReason, setShowReason] = useState(false);
 
@@ -72,6 +73,7 @@ export function DemoRecommendationCard({ item, edges, onFeedback }: DemoRecommen
                     {expiry ? (
                       <div className={expiry.startsWith("Срок") ? "demo-variant__unknown" : ""}>{expiry}</div>
                     ) : null}
+                    <button className="clone-link-btn" type="button" disabled={busy} onClick={() => onPurchase(variant.item_id)}>Купить {variant.item_id}</button>
                     {variant.url ? (
                       <a className="demo-card__link" href={variant.url} target="_blank" rel="noreferrer">
                         Вариант →
@@ -106,11 +108,8 @@ export function DemoRecommendationCard({ item, edges, onFeedback }: DemoRecommen
       ) : null}
 
       <div className="demo-card__actions">
-        <button className="clone-link-btn" type="button" onClick={() => onFeedback(item.item_id, "click")}>
-          click
-        </button>
-        <button className="clone-link-btn" type="button" onClick={() => onFeedback(item.item_id, "purchase")}>
-          purchase
+        <button className="clone-link-btn" type="button" disabled={busy} onClick={() => onPurchase(item.item_id)}>
+          Купить товар
         </button>
       </div>
     </article>

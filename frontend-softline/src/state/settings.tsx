@@ -25,7 +25,7 @@ export const DEFAULT_SETTINGS: Settings = {
   userId: "u1",
   baseUrl: import.meta.env.VITE_RECSYS_BASE_URL ?? "/api",
   token: "",
-  mockMode: false,
+  mockMode: true,
   scenario: "demo",
   limit: 9,
   timeoutMs: 8000,

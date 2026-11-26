@@ -1,100 +1,108 @@
-// API-проверки рекомендаций на запущенном бэкенде (RECSYS_ADDR, по умолчанию :8080).
-//   node --test tests/e2e/demo/api.test.mjs
 import test from "node:test";
 import assert from "node:assert/strict";
 
-const BASE = process.env.RECSYS_ADDR?.startsWith("http")
-  ? process.env.RECSYS_ADDR.replace(/\/$/, "")
-  : "http://localhost:8080/api/v1";
+const base = (process.env.RECSYS_E2E_API ?? "http://127.0.0.1:8080").replace(/\/$/, "");
 
-async function req(path, opts = {}) {
-  const response = await fetch(BASE + path, { ...opts, signal: AbortSignal.timeout(15000) });
-  const body = await response.json().catch(() => ({}));
-  return { status: response.status, body };
+async function request(path, { token, body, requestID } = {}) {
+  const response = await fetch(base + path, {
+    method: body === undefined ? "GET" : "POST",
+    headers: {
+      ...(token ? { Authorization: "Bearer " + token } : {}),
+      ...(requestID ? { "X-Request-ID": requestID } : {}),
+      ...(body === undefined ? {} : { "Content-Type": "application/json" }),
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+    signal: AbortSignal.timeout(10_000),
+  });
+  const text = await response.text();
+  const data = response.headers.get("content-type")?.includes("json") ? JSON.parse(text) : text;
+  return { status: response.status, id: response.headers.get("x-request-id"), data };
 }
 
-const post = (path, payload) => req(path, {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify(payload),
-});
+test("seven OpenAPI operations, Swagger and isolated purchase-to-renewal flow", async () => {
+  const health = await request("/api/v1/health");
+  assert.equal(health.status, 200);
+  assert.equal(health.data.status, "ok");
+  const ui = await request("/swagger/");
+  assert.equal(ui.status, 200);
+  assert.match(ui.data, /\/swagger\/openapi\.yaml/);
+  const spec = await request("/swagger/openapi.yaml");
+  assert.equal(spec.status, 200);
+  assert.match(spec.data, /operationId: getCurrentRecommendations/);
 
-let alive = true;
-try {
-  const r = await req("/health");
-  alive = r.status === 200;
-} catch {
-  alive = false;
-}
+  const unauth = await request("/api/v1/recommendations/me", { requestID: "e2e-probe" });
+  assert.equal(unauth.status, 401);
+  assert.equal(unauth.id, "e2e-probe");
+  assert.equal(unauth.data.request_id, unauth.id);
 
-test("API рекомендаций", { skip: !alive ? "бэкенд не запущен" : false }, async (t) => {
-  await t.test("health и формат выдачи", async () => {
-    const health = await req("/health");
-    assert.equal(health.status, 200);
-    assert.equal(health.body.status, "ok");
+  const register = await request("/api/v1/auth/register", {
+    body: { login: "integration-" + crypto.randomUUID(), password: "synthetic-password", client_group: "B2C" },
+  });
+  assert.equal(register.status, 201);
+  assert.ok(register.data.access_token);
+  const login = async (name, password) => {
+    const result = await request("/api/v1/auth/login", { body: { login: name, password } });
+    assert.equal(result.status, 200);
+    assert.ok(result.data.access_token);
+    return result.data.access_token;
+  };
+  const first = await login("demo-b2b", process.env.DEMO_B2B_PASSWORD ?? "demo-b2b-pass");
+  const second = await login("demo-b2c", process.env.DEMO_B2C_PASSWORD ?? "demo-b2c-pass");
+  const me = await request("/api/v1/users/me", { token: first });
+  const other = await request("/api/v1/users/me", { token: second });
+  assert.equal(me.status, 200);
+  assert.equal(other.status, 200);
+  assert.notEqual(me.data.profile_id, other.data.profile_id);
 
-    const reco = await req("/recommendations?user_id=u1&limit=3");
-    assert.equal(reco.status, 200);
-    assert.ok(reco.body.request_id);
-    assert.ok(reco.body.items.length > 0 && reco.body.items.length <= 3);
-    for (const item of reco.body.items) {
-      assert.ok(item.item_id && item.title);
-      assert.ok(Number.isFinite(item.score) && item.score >= 0 && item.score <= 1);
-      assert.ok(typeof item.reason === "string" && item.reason.length > 0);
+  const catalog = await request("/api/v1/products?limit=100", { token: first });
+  assert.equal(catalog.status, 200);
+  assert.ok(catalog.data.items.some((item) => item.item_id === "DEMO-BASE" && item.available));
+
+  const rejected = await request("/api/v1/purchases", {
+    token: first, body: { item_id: "DEMO-BASE", profile_id: other.data.profile_id },
+  });
+  assert.equal(rejected.status, 400);
+  const spoofedQuery = await request("/api/v1/recommendations/me?client_id=DEMO-NEW", { token: first });
+  assert.equal(spoofedQuery.status, 400);
+
+  const recommend = async (token) => {
+    const result = await request("/api/v1/recommendations/me", { token });
+    assert.equal(result.status, 200);
+    const body = result.data;
+    assert.equal(body.request_id, result.id);
+    assert.equal(body.snapshot_id, "demo-v1");
+    const nodes = new Set(body.graph.nodes.map((node) => node.id));
+    const edges = new Map(body.graph.edges.map((edge) => [edge.id, edge]));
+    for (const edge of edges.values()) {
+      assert.ok(nodes.has(edge.from) && nodes.has(edge.to) && edge.source);
+      assert.equal(edge.snapshot_id, body.snapshot_id);
     }
-  });
+    for (const item of body.items) assert.ok(item.evidence_ids.every((id) => edges.has(id)));
+    return body;
+  };
+  const isolated = (await recommend(second)).items.map((item) => item.item_id);
+  const purchase = async (item_id) => {
+    const result = await request("/api/v1/purchases", { token: first, body: { item_id } });
+    assert.equal(result.status, 201);
+    assert.equal(result.data.item_id, item_id);
+  };
 
-  await t.test("валидация запросов", async () => {
-    assert.equal((await req("/recommendations")).status, 400);
-    assert.equal((await req("/recommendations?user_id=u1&limit=0")).status, 400);
-    assert.equal((await req("/recommendations?user_id=u1&limit=abc")).status, 400);
-    assert.equal((await req("/recommendations/me")).status, 401);
-
-    const me = await req("/recommendations/me", {
-      headers: { Authorization: "Bearer demo-token-u1" },
-    });
-    assert.equal(me.status, 200);
-  });
-
-  await t.test("профили изолированы по client_id", async () => {
-    await req("/recommendations?user_id=u1&limit=1");
-    await req("/recommendations?user_id=u2&limit=1");
-    const [u1, u2] = await Promise.all([
-      req("/debug/runs?user_id=u1"),
-      req("/debug/runs?user_id=u2"),
-    ]);
-    assert.equal(u1.status, 200);
-    assert.equal(u2.status, 200);
-    assert.notEqual(u1.body.client_id, u2.body.client_id);
-    const id1 = u1.body.runs?.[0]?.run_id;
-    const id2 = u2.body.runs?.[0]?.run_id;
-    assert.ok(id1 && id2 && id1 !== id2, "run'ы разных профилей должны различаться");
-  });
-
-  await t.test("фидбек записывается и не ломает выдачу", async () => {
-    const reco = await req("/recommendations?user_id=u1&limit=1");
-    const itemId = reco.body.items[0].item_id;
-    const feedback = await post("/feedback", { user_id: "u1", item_id: itemId, action: "click" });
-    assert.equal(feedback.status, 200);
-    assert.equal(feedback.body.accepted, true);
-    assert.equal((await post("/feedback", { user_id: "u1", action: "click" })).status, 400);
-    const after = await req("/recommendations?user_id=u1&limit=3");
-    assert.equal(after.status, 200);
-  });
-
-  await t.test("параллельный new run не дублирует id", async () => {
-    const created = await Promise.all(
-      Array.from({ length: 5 }, () => req("/recommendations/new?user_id=u2", { method: "POST" })),
-    );
-    assert.ok(created.every((r) => r.status === 200));
-    const ids = created.map((r) => r.body?.run_id);
-    assert.equal(new Set(ids).size, ids.length, `дубли run_id: ${ids.join(",")}`);
-  });
-
-  await t.test("параллельные запросы", async () => {
-    const results = await Promise.all(
-      Array.from({ length: 30 }, () => req("/recommendations?user_id=u1&limit=3")),
-    );
-    assert.ok(results.every((r) => r.status === 200));
-  });
+  await purchase("DEMO-BASE");
+  const before = await recommend(first);
+  const renewal = before.items.find((item) => item.item_id === "DEMO-RENEW-12");
+  assert.equal(renewal?.recommendation_kind, "renewal");
+  assert.deepEqual(renewal.variants.map((variant) => variant.item_id), ["DEMO-RENEW-12", "DEMO-RENEW-24"]);
+  assert.deepEqual(renewal.variants.map((variant) => variant.differences.find((d) => d.field === "term").value), [12, 24]);
+  assert.ok(renewal.evidence_ids.every((id) => before.graph.edges.some((edge) =>
+    edge.id === id && edge.from === "item:DEMO-BASE" && edge.type === "renewal")));
+  await purchase("DEMO-RENEW-12");
+  const after = await recommend(first);
+  assert.ok(after.items.some((item) => item.item_id === "DEMO-RENEW-24"));
+  assert.ok(!after.items.some((item) => item.item_id === "DEMO-RENEW-12" ||
+    item.variants.some((variant) => variant.item_id === "DEMO-RENEW-12")));
+  await purchase("DEMO-RENEW-24");
+  const partial = await recommend(first);
+  assert.ok(partial.items.length > 0 && partial.items.length < 3);
+  assert.equal(partial.partial_reason, "insufficient_eligible_products");
+  assert.deepEqual((await recommend(second)).items.map((item) => item.item_id), isolated);
 });

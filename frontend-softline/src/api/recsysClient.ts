@@ -136,19 +136,17 @@ export async function me(cfg: RecsysClientConfig): Promise<MeResponse> {
   return request<MeResponse>(cfg, "/users/me");
 }
 
-export async function sendFeedback(
-  cfg: RecsysClientConfig,
-  itemId: string,
-  action: "click" | "purchase",
-): Promise<void> {
-  if (cfg.transport === "mock") return;
-  await request(cfg, "/feedback", {
-    method: "POST",
-    body: JSON.stringify({ item_id: itemId, action }),
-  });
+export interface CatalogProduct {
+  item_id: string;
+  title: string;
+  available: boolean;
 }
 
-export async function newRun(cfg: RecsysClientConfig): Promise<void> {
+export function listProducts(cfg: RecsysClientConfig, signal?: AbortSignal): Promise<{ items: CatalogProduct[] }> {
+  return request(cfg, "/products?limit=100", { signal });
+}
+
+export async function purchase(cfg: RecsysClientConfig, itemId: string): Promise<void> {
   if (cfg.transport === "mock") return;
-  await request(cfg, "/recommendations/me/new", { method: "POST" });
+  await request(cfg, "/purchases", { method: "POST", body: JSON.stringify({ item_id: itemId }) });
 }

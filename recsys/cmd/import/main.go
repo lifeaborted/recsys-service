@@ -6,11 +6,13 @@ package main
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 	"time"
 
 	"recsys/internal/contract"
@@ -18,6 +20,15 @@ import (
 	"recsys/internal/eval"
 	"recsys/internal/store/postgres"
 )
+
+type checkedWriter struct {
+	store  *postgres.Store
+	digest string
+}
+
+func (w checkedWriter) WriteDataset(ctx context.Context, version string, batches []contract.DatasetBatch) error {
+	return w.store.WriteDatasetWithChecksum(ctx, version, w.digest, batches)
+}
 
 type dryRunWriter struct {
 	version string
@@ -41,6 +52,7 @@ func main() {
 	checkAnon := flag.Bool("check-anonymization", false, "проверить пороги обезличивания (>=3 покупателей, >=5 физлиц для B2C)")
 	dryRun := flag.Bool("dry-run", false, "проверить CSV и сформировать партии без записи в PostgreSQL")
 	verifyV4 := flag.Bool("verify-v4", false, "проверить закрытую БД v4 (recommendations.dataset_release, sales, clients)")
+	workbookSHA := flag.String("workbook-sha256", "", "SHA-256 of the source workbook for v4 publication")
 	flag.Parse()
 
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, nil))
@@ -55,6 +67,7 @@ func main() {
 		checkAnon:   *checkAnon,
 		dryRun:      *dryRun,
 		verifyV4:    *verifyV4,
+		workbookSHA: *workbookSHA,
 	}); err != nil {
 		logger.Error("import failed", "error", err)
 		fmt.Fprintln(os.Stderr, "import:", err)
@@ -63,6 +76,7 @@ func main() {
 }
 
 type options struct {
+	workbookSHA string
 	clientsPath string
 	salesPath   string
 	version     string
@@ -92,8 +106,29 @@ func run(ctx context.Context, logger *slog.Logger, opts options) error {
 		logger.Info("anonymization verified", "items", anon.ItemsChecked, "min_buyers", anon.MinItemBuyers, "min_b2c_buyers", anon.MinB2CBuyers)
 	}
 
+	var writer contract.DatasetWriter = &dryRunWriter{}
+	mode := "dry-run"
 	if !opts.dryRun {
-		return errors.New("SQL-адаптер contract.DatasetWriter принадлежит зоне 4 (internal/store/postgres); используйте -dry-run для проверки CSV или см. tests/e2e/data/README.md")
+		digest := strings.ToLower(strings.TrimSpace(opts.workbookSHA))
+		if digest != "" || opts.version == "v4" {
+			raw, err := hex.DecodeString(digest)
+			if err != nil || len(raw) != 32 {
+				return fmt.Errorf("publishing v4 requires a valid -workbook-sha256")
+			}
+		}
+		dsn, err := data.ResolveDatabaseURL()
+		if err != nil {
+			return err
+		}
+		store, err := postgres.OpenContext(ctx, dsn)
+		if err != nil {
+			return err
+		}
+		defer store.Close()
+		writer, mode = store, "publish"
+		if digest != "" {
+			writer = checkedWriter{store: store, digest: digest}
+		}
 	}
 
 	cf, err := os.Open(opts.clientsPath)
@@ -107,13 +142,12 @@ func run(ctx context.Context, logger *slog.Logger, opts options) error {
 	}
 	defer sf.Close()
 
-	writer := &dryRunWriter{}
 	summary, err := data.ImportCSV(ctx, opts.version, cf, sf, writer, opts.batchSize)
 	if err != nil {
 		return err
 	}
 
-	logger.Info("csv dry-run completed",
+	logger.Info("csv import completed", "mode", mode,
 		"version", summary.Version,
 		"clients", summary.Clients,
 		"sales", summary.Sales,
@@ -123,8 +157,8 @@ func run(ctx context.Context, logger *slog.Logger, opts options) error {
 		"has_product_group_col", summary.HasProductGroupColumn,
 		"empty_sku_rows", summary.EmptySKURows,
 	)
-	fmt.Printf("import dry-run ok: version=%s clients=%d sales=%d batches=%d items=%d product_groups=%d has_product_group=%t empty_sku=%d\n",
-		summary.Version, summary.Clients, summary.Sales, summary.Batches, summary.DistinctItems,
+	fmt.Printf("import %s ok: version=%s clients=%d sales=%d batches=%d items=%d product_groups=%d has_product_group=%t empty_sku=%d\n",
+		mode, summary.Version, summary.Clients, summary.Sales, summary.Batches, summary.DistinctItems,
 		summary.DistinctProductGroups, summary.HasProductGroupColumn, summary.EmptySKURows)
 	return nil
 }

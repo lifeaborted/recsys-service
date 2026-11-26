@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { sendFeedback, newRun } from "../api/recsysClient";
+import { useEffect, useState } from "react";
+import { listProducts, purchase, type CatalogProduct } from "../api/recsysClient";
 import type { DemoScenario } from "../api/recsysTypes";
 import { DemoRecommendationCard } from "../components/DemoRecommendationCard";
 import { useDemoRecommendations } from "../hooks/useDemoRecommendations";
@@ -21,6 +21,8 @@ export function DemoPage() {
   const demo = useDemoRecommendations();
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [catalog, setCatalog] = useState<CatalogProduct[]>([]);
+  const [selectedItem, setSelectedItem] = useState("");
 
   const cfg = {
     baseUrl: import.meta.env.VITE_RECSYS_API_BASE ?? "/api/v1",
@@ -28,23 +30,26 @@ export function DemoPage() {
     token: session.profile?.token ?? "",
   };
 
-  const onFeedback = async (itemId: string, action: "click" | "purchase") => {
-    try {
-      await sendFeedback(cfg, itemId, action);
-      setNotice(`Событие «${action}» записано для ${itemId}`);
-    } catch (cause) {
-      setNotice(cause instanceof Error ? cause.message : "Ошибка записи события");
-    }
-  };
+  useEffect(() => {
+    setCatalog([]);
+    setSelectedItem("");
+    if (cfg.transport !== "http" || !cfg.token) return;
+    const controller = new AbortController();
+    listProducts(cfg, controller.signal).then(
+      (data) => setCatalog(data.items.filter((item) => item.available)),
+      (error: Error) => { if (!controller.signal.aborted) setNotice(error.message); },
+    );
+    return () => controller.abort();
+  }, [cfg.baseUrl, cfg.transport, cfg.token]);
 
-  const onCreateRun = async () => {
+  const buy = async (itemId: string) => {
     setBusy(true);
     try {
-      await newRun(cfg);
-      setNotice("Новый run создан");
+      await purchase(cfg, itemId);
+      setNotice(`Покупка записана для ${itemId}`);
       demo.refresh();
     } catch (cause) {
-      setNotice(cause instanceof Error ? cause.message : "Ошибка создания run");
+      setNotice(cause instanceof Error ? cause.message : "Ошибка записи покупки");
     } finally {
       setBusy(false);
     }
@@ -68,6 +73,7 @@ export function DemoPage() {
               value={session.profile?.id ?? ""}
               onChange={(event) => session.loginAs(event.target.value)}
             >
+              <option value="" disabled>Выберите профиль</option>
               {DEMO_PROFILES.map((profile) => (
                 <option key={profile.id} value={profile.id}>
                   {profile.group} · {profile.login}
@@ -104,10 +110,10 @@ export function DemoPage() {
           <button
             className="button button_default button_size-l"
             type="button"
-            onClick={() => void onCreateRun()}
+            onClick={demo.refresh}
             disabled={busy}
           >
-            Новый run
+            Пересчитать выдачу
           </button>
           <button className="button button_default button_size-l" type="button" onClick={session.logout}>
             Выйти
@@ -121,17 +127,17 @@ export function DemoPage() {
           {demo.data ? ` · snapshot: ${demo.data.snapshot_id}` : ""}
         </p>
 
-        {notice ? <p className="demo-status">{notice}</p> : null}
-
-        {demo.data ? (
-          <p className="demo-status">
-            Доли попаданий (синтетический набор {demo.data.snapshot_id}, каталог и профили от 26.11.2026):{" "}
-            другой артикул знакомого семейства — {Math.round(items.filter((item) => item.family_id).length / Math.max(items.length, 1) * 100)}%;{" "}
-            новые продукты — {Math.round(items.filter((item) => !item.family_id).length / Math.max(items.length, 1) * 100)}%;{" "}
-            неизвестное семейство — 0%. Это демонстрационные доли по выбранной выдаче; агрегаты
-            качества участника 1 в открытом стенде не используются.
-          </p>
+        {session.error ? <p role="alert">{session.error}</p> : null}
+        {catalog.length ? (
+          <div className="demo-toolbar">
+            <label>Каталог <select value={selectedItem} onChange={(event) => setSelectedItem(event.target.value)}>
+              <option value="">Выберите товар</option>
+              {catalog.map((item) => <option key={item.item_id} value={item.item_id}>{item.title}</option>)}
+            </select></label>
+            <button type="button" disabled={!selectedItem || busy} onClick={() => void buy(selectedItem)}>Купить из каталога</button>
+          </div>
         ) : null}
+        {notice ? <p className="demo-status">{notice}</p> : null}
 
         {demo.data?.partial_reason ? (
           <div className="demo-banner">
@@ -156,10 +162,11 @@ export function DemoPage() {
             const edges = (graph?.edges ?? []).filter(
               (edge) =>
                 item.evidence_ids.includes(edge.id) &&
-                (edge.to === `item:${item.item_id}` || edge.from === `item:${item.item_id}`),
+                [item.item_id, ...item.variants.map((variant) => variant.item_id)]
+                  .some((id) => edge.to === `item:${id}` || edge.from === `item:${id}`),
             );
             return (
-              <DemoRecommendationCard key={item.item_id} item={item} edges={edges} onFeedback={onFeedback} />
+              <DemoRecommendationCard key={item.item_id} item={item} edges={edges} onPurchase={buy} busy={busy} />
             );
           })}
         </div>

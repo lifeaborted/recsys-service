@@ -13,15 +13,18 @@ import (
 
 // Config holds runtime settings for the Go API and CLI tools.
 type Config struct {
-	Addr           string
-	DatabaseURL    string
-	RequestTimeout time.Duration
-	SessionTTL     time.Duration
-	BcryptCost     int
-	MigrationsDir  string
-	OpenAPIPath    string
-	ExamplesDir    string
-	Mock           bool
+	Addr            string
+	DatabaseURL     string
+	RequestTimeout  time.Duration
+	SessionTTL      time.Duration
+	BcryptCost      int
+	MigrationsDir   string
+	MigrationsTable string
+	MaintenanceDB   string
+	Schema          string
+	OpenAPIPath     string
+	ExamplesDir     string
+	Mock            bool
 }
 
 // LookupFunc resolves an environment variable by name.
@@ -66,15 +69,18 @@ func LoadFromLookup(lookup LookupFunc) Config {
 	mock := mockRaw == "1" || mockRaw == "true" || mockRaw == "yes"
 
 	return Config{
-		Addr:           get("RECSYS_ADDR", "127.0.0.1:8080"),
-		DatabaseURL:    dsn,
-		RequestTimeout: reqTimeout,
-		SessionTTL:     sessionTTL,
-		BcryptCost:     cost,
-		MigrationsDir:  get("RECSYS_MIGRATIONS_DIR", "migrations"),
-		OpenAPIPath:    get("RECSYS_OPENAPI_PATH", "api/openapi.yaml"),
-		ExamplesDir:    get("RECSYS_EXAMPLES_DIR", "api/examples"),
-		Mock:           mock,
+		Addr:            get("RECSYS_ADDR", "127.0.0.1:8080"),
+		DatabaseURL:     dsn,
+		RequestTimeout:  reqTimeout,
+		SessionTTL:      sessionTTL,
+		BcryptCost:      cost,
+		MigrationsDir:   get("RECSYS_MIGRATIONS_DIR", "migrations"),
+		MigrationsTable: get("RECSYS_MIGRATIONS_TABLE", "schema_migrations"),
+		MaintenanceDB:   get("RECSYS_MAINTENANCE_DB", "postgres"),
+		Schema:          get("RECSYS_SCHEMA", "recommendations"),
+		OpenAPIPath:     get("RECSYS_OPENAPI_PATH", "api/openapi.yaml"),
+		ExamplesDir:     get("RECSYS_EXAMPLES_DIR", "api/examples"),
+		Mock:            mock,
 	}
 }
 

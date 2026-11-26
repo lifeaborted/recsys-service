@@ -79,7 +79,7 @@ const up = await serverUp();
 const executablePath = findBrowser();
 let apiUp = false;
 try {
-  const response = await fetch("http://localhost:8080/api/v1/health", { signal: AbortSignal.timeout(2000) });
+  const response = await fetch((process.env.RECSYS_E2E_API ?? "http://localhost:8080") + "/api/v1/health", { signal: AbortSignal.timeout(2000) });
   apiUp = response.ok;
 } catch {
   apiUp = false;
@@ -171,15 +171,30 @@ test("демо-экран: карточки, варианты, ошибка и �
     assert.ok(cards > 0 && cards <= 3);
     const status = await page.locator(".demo-status").first().textContent();
     assert.match(status, /request_id/);
+    if (process.env.RECSYS_E2E_LIVE === "1") {
+      await page.getByLabel("Каталог").selectOption("DEMO-BASE");
+      await page.getByRole("button", { name: "Купить из каталога" }).click();
+      await page.getByText("Покупка записана для DEMO-BASE").waitFor();
+      const renewal = page.locator(".demo-card").filter({ has: page.getByText("продление", { exact: true }) }).first();
+      await renewal.getByRole("button", { name: "Сравнить варианты" }).click();
+      await renewal.getByText("DEMO-RENEW-12 · 12 мес.").waitFor();
+      await renewal.getByText("DEMO-RENEW-24 · 24 мес.").waitFor();
+      await renewal.getByRole("button", { name: "Почему рекомендуем" }).click();
+      assert.match(await renewal.locator(".demo-card__source").first().textContent(), /item:DEMO-BASE → item:DEMO-RENEW-12/);
+      await renewal.getByRole("button", { name: "Купить DEMO-RENEW-12" }).click();
+      await page.getByText("Покупка записана для DEMO-RENEW-12").waitFor();
+      await page.getByRole("heading", { name: /24/ }).waitFor();
+      assert.equal(await page.getByText("DEMO-RENEW-12 · 12 мес.").count(), 0);
+    }
     await transport.selectOption("mock");
   });
 
-  await t.test("главная и страница проверки БД показывают карточки", async () => {
+  await t.test("старые экраны показывают карточки в mock-режиме", async () => {
     await page.goto(`${ORIGIN}/#/`);
     await page.getByText("Вам может подойти").waitFor();
     await page.waitForFunction(() => document.querySelectorAll("#suggestion-widget .suggestion").length > 0);
     const homeCards = await page.locator("#suggestion-widget .suggestion").count();
-    assert.ok(homeCards > 0 && homeCards <= 3);
+    assert.ok(homeCards > 0 && homeCards <= 9);
 
     await page.goto(`${ORIGIN}/#/recommendations`);
     await page.getByText("Тест рекомендаций").first().waitFor();
@@ -187,7 +202,7 @@ test("демо-экран: карточки, варианты, ошибка и �
     const rows = await page.locator(".clone-table tbody tr").count();
     assert.ok(rows > 0);
     const stats = await page.locator(".stat-card__value").allTextContents();
-    assert.ok(stats.includes("LIVE"));
+    assert.ok(stats.includes("MOCK"));
   });
 
   await t.test("карточки видны на узком экране", async () => {

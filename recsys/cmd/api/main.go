@@ -17,6 +17,7 @@ import (
 	"recsys/internal/contract"
 	"recsys/internal/domain"
 	"recsys/internal/logger"
+	"recsys/internal/recommend"
 	"recsys/internal/store/postgres"
 	transporthttp "recsys/internal/transport/http"
 )
@@ -142,7 +143,7 @@ func main() {
 		httpCfg.Catalog = adapter
 		httpCfg.Purchases = adapter
 		// Constructor-injected contract.Recommender (single wiring point for final assembly).
-		httpCfg.Recommender = postgres.NewRecommender(store)
+		httpCfg.Recommender = recommend.New(store)
 	}
 
 	server := &http.Server{

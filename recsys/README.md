@@ -1,42 +1,57 @@
 # Агент рекомендаций для личного кабинета
 
-Go API использует Go 1.22+ и PostgreSQL через lib/pq. Целевое хранилище — существующая схема `recommendations` в PostgreSQL 17.
+Go 1.26, Node.js 22+, PostgreSQL 17 и pgx. Команды выполняются из `recsys`, если не указано иное.
 
-```sh
-go build ./...
-go test ./...
-go vet ./...
-go run ./cmd/api
+## Локальное демо
+
+```powershell
+make up
+$env:DATABASE_URL = 'postgres://recsys_dev:recsys_dev@127.0.0.1:55432/recsys_dev?sslmode=disable'
+make seed
+make run
 ```
 
-`GET http://127.0.0.1:8080/api/v1/health` возвращает `ok`, если схема `recommendations`
-доступна (в mock-режиме — всегда `ok`). Адрес задаётся `RECSYS_ADDR`, подключение —
-`RECSYS_DATABASE_URL` либо поля `HOST/PORT/USER/PASSWORD/DATADASE` в `recsys/.env`
-(все настройки бывшего `config.json` перенесены туда, шаблон — `.env.example`).
-Подмена транспорта: `RECSYS_MOCK=1` раздаёт синтетику из `api/examples`.
+`make up` поднимает dev PostgreSQL с `pg_trgm` и `vector`. `make down` останавливает Compose и сохраняет том. `make seed` применяет миграции и загружает синтетику с `snapshot_id=demo-v1`. Повтор seed на синтетической БД идемпотентен. Порт API по умолчанию 8080. При использовании `RECSYS_DEV_PG_PORT` укажите этот же порт в `DATABASE_URL`. `make swagger` получает спецификацию запущенного API, интерфейс доступен на [Swagger UI](http://127.0.0.1:8080/swagger/).
 
-## Запуск и проверка v4
+Во втором терминале запустите `npm ci` и `npm run dev` из `frontend-softline`. Откройте `http://localhost:5173/#/demo`, выберите HTTP и профиль. Сценарий покупки и браузерные команды есть в [инструкции демо](docs/demo/README.md).
 
-Демо запускается на отдельной БД с синтетическими профилями. Из папки `recsys` задайте `RECSYS_DATABASE_URL` для демо-БД и выполните:
+## Офлайн-публикация
+
+На отдельной синтетической БД с применёнными миграциями выполните:
+
+```powershell
+make import ARGS="-clients testdata/smoke/clients.csv -sales testdata/smoke/sales.csv -version demo-pipeline"
+make -s enrich ARGS="-feed internal/enrichment/testdata/mini-feed.xml -items internal/enrichment/testdata/mini-items.json -sources internal/enrichment/testdata/mini-sources.json -feed-url https://example.com/demo-feed.xml -catalog-version mini-v1 -snapshot pipeline-v1" > evidence.local.json
+make build-signals ARGS="-database -dataset demo-pipeline -snapshot pipeline-v1 -train-through 2026-08-31 -evidence evidence.local.json"
+make backtest ARGS="-clients testdata/smoke/clients.csv -sales testdata/smoke/sales.csv -label demo"
+```
+
+`import -dry-run` проверяет CSV без записи. Публикация CSV с `-version v4` требует `-workbook-sha256` исходной книги. При перенаправлении JSON используйте `make -s enrich`, чтобы Make не добавлял команду в начало файла. В `build-signals` артефакт доказательств и исторические таблицы используются до публикации активного снимка. Для покупки выбранный `offer_id` должен быть загружен в витрину с соответствием каноническому `item_id`. Мини-фид проверяет публикацию фактов, а готовую витрину для покупки создаёт `make seed`. Эмбеддинги в этих сценариях выключены.
+
+## Модульные и сквозные проверки
+
+| Модуль | Команда |
+|---|---|
+| DATA | `go test -count=1 -v ./internal/data/... ./internal/eval/...` |
+| RECOMMEND | `go test -count=1 -v ./internal/signals/... ./internal/recommend/...` |
+| EVIDENCE | `go test -count=1 -v ./internal/enrichment/... ./internal/explain/...` |
+| PLATFORM | `go test -count=1 -v ./internal/auth/... ./internal/store/postgres/... ./internal/transport/...` |
+| DEMO | `node --test tests/e2e/demo/contract.test.mjs` |
+
+`make check` выполняет сборку, vet, unit и проверку JSON. `make test-e2e` требует Docker Compose и PowerShell 7. Каждый запуск создаёт проект, сеть, PostgreSQL на tmpfs и отдельные синтетические данные. Рабочий DSN исключается из окружения теста. [Фактические результаты](docs/demo/INTEGRATION.md).
+
+## Закрытая оценка v4
+
+Восстановите проверенный дамп в отдельную чистую БД PostgreSQL 17, задайте её `DATABASE_URL` и выполните:
 
 ```sh
 go run ./cmd/migration up
-go run ./cmd/migration seed
-go run ./cmd/api
-node --test tests/e2e/demo/contract.test.mjs
+go run ./cmd/import -verify-v4
+go run ./cmd/build-signals -database -dataset v4 -snapshot v4-integration-20260831 -train-through 2026-08-31
+go run ./cmd/backtest -snapshot v4-integration-20260831
 ```
 
-Для закрытой оценки восстановите командный дамп PostgreSQL 17 в новую пустую БД и задайте её DSN в `RECSYS_DATABASE_URL`:
-
-```sh
-createdb recsys_v4
-psql -X -v ON_ERROR_STOP=1 --single-transaction -d recsys_v4 -f /path/to/recommendations.sql
-go run ./cmd/backtest
-```
-
-Дамп включает схему. Бэктест читает версию и SHA-256 книги из `recommendations.dataset_release` и проверяет ожидаемые размеры v4. Сравните шесть строк результата с командой `python baseline.py Датасет_Рекомендации_ЛК_v4.xlsx` в закрытой папке организаторов. A — 337 клиентов, Precision@3 равен 5,44% и 5,64%. B — 172 клиента, 7,36% и 6,01%. В каждой паре указаны популярность и совместные покупки.
-
-Демо-экран и передача участника 5 описаны в [документации](docs/demo/README.md) и [результатах проверок](tests/e2e/demo/HANDOFF.md).
+Сверьте SHA-256 книги с `recommendations.dataset_release` и шесть строк Go с `python baseline.py Датасет_Рекомендации_ЛК_v4.xlsx`. A — 337 клиентов, Precision@3 популярности и совместных покупок 5,44% и 5,64%. B — 172 клиента, 7,36% и 6,01%. В главной таблице гибрида используется топ-3 из 817 товаров продаж и закреплённый снимок. Train заканчивается неделей 31.08.2026 включительно. Корзина — `(order_id, order_week)`. Приватные входы и DSN храните локально.
 
 ## Пять зон работы
 
@@ -56,7 +71,7 @@ go run ./cmd/backtest
 
 - `DatasetWriter` публикует нормализованные партии целиком. В v4 корзина — `(order_id, order_week)`. Недели до 31.08.2026 включительно входят в обучение. Популярность считается по разным покупателям, совместные покупки — по корзинам. Ничьи разрешаются по популярности и затем по `item_id`. Короткий список делится на 3.
 - `SnapshotWriter` публикует готовый снимок, `FactsReader` читает профиль, историю и ограниченные пулы кандидатов. В историческом прогоне указывайте конкретный снимок и дату отсечения.
-- Целевой гибрид использует общий контракт `Recommender`. Сейчас HTTP обслуживает демовыдачу из каталога, а CLI считает эталонные алгоритмы v4. В HTTP профиль поступает из сессии. Для истории, графа и оценки используется `item_id`, `offer_id` связывает результат с карточкой витрины.
+- HTTP и CLI бэктеста используют `recommend.New(store)` через общий контракт `Recommender`. В HTTP профиль поступает из сессии. Для истории, графа и оценки используется `item_id`, `offer_id` связывает результат с карточкой витрины.
 - Для первого сквозного сценария используйте [синтетическую историю](testdata/smoke) и пример ответа. Форму публичных данных сверяйте с [OpenAPI](api/openapi.yaml). Пустые списки в ответе API представляются как `[]`, отсутствующий `partial_reason` — как `null`.
 
 Для подключения см. `.env.example`. Приватные дампы, датасет и учётные данные держите вне открытого репозитория.

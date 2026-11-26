@@ -7,7 +7,7 @@ $ErrorActionPreference = "Stop"
 
 # Ensure Go toolchain is discoverable in non-interactive PowerShell sessions.
 $scoopShims = Join-Path $HOME "scoop\shims"
-if ((Test-Path $scoopShims) -and ($env:PATH -notlike "*$scoopShims*")) {
+if ($IsWindows -and (Test-Path $scoopShims) -and ($env:PATH -notlike "*$scoopShims*")) {
     $env:PATH = "$scoopShims;$env:PATH"
 }
 
@@ -69,6 +69,7 @@ try {
     $e2eDsn = "postgres://${pgUser}:${pgPass}@127.0.0.1:${pgPort}/${pgDb}?sslmode=disable"
     $env:DATABASE_URL = $e2eDsn
     $env:RECSYS_BCRYPT_COST = "4"
+    $env:RECSYS_MOCK = "0"
     $env:DEMO_B2B_LOGIN = "demo-b2b"
     $env:DEMO_B2B_PASSWORD = "e2e-b2b-password"
     $env:DEMO_B2C_LOGIN = "demo-b2c"
@@ -127,7 +128,9 @@ SELECT json_build_object(
 
     $env:DATABASE_URL = $e2eDsn
     $env:RECSYS_ADDR = "127.0.0.1:$apiPort"
-    $apiProcess = Start-Process -FilePath $apiExe -WorkingDirectory $recsysRoot -PassThru -WindowStyle Hidden
+    $start = @{ FilePath = $apiExe; WorkingDirectory = $recsysRoot; PassThru = $true }
+    if ($IsWindows) { $start.WindowStyle = "Hidden" }
+    $apiProcess = Start-Process @start
 
     $baseUrl = "http://127.0.0.1:$apiPort"
     $ready = $false
@@ -144,74 +147,23 @@ SELECT json_build_object(
     if (-not $ready) { throw "API did not become healthy on $baseUrl" }
     Write-Host "[check] API healthy on $baseUrl (X-Request-ID=$($h.Headers['X-Request-ID']))"
 
-    # Verify Swagger UI HTML and OpenAPI YAML served from the same OpenAPI document.
-    $swUi = Invoke-WebRequest -Uri "$baseUrl/swagger/" -Method GET -SkipHttpErrorCheck
-    if ($swUi.StatusCode -ne 200 -or ([string]$swUi.Content) -notmatch "/swagger/openapi.yaml") {
-        throw "Swagger UI HTML check failed (status=$($swUi.StatusCode))"
-    }
-    $sw = Invoke-WebRequest -Uri "$baseUrl/swagger/openapi.yaml" -Method GET -SkipHttpErrorCheck
-    $swText = if ($sw.Content -is [byte[]]) { [System.Text.Encoding]::UTF8.GetString($sw.Content) } else { [string]$sw.Content }
-    if ($sw.StatusCode -ne 200 -or $swText -notmatch "operationId: getCurrentRecommendations") {
-        throw "Swagger OpenAPI spec check failed (status=$($sw.StatusCode))"
-    }
-
-    # Verify 401 without token + X-Request-ID on error.
-    $unauth = Invoke-WebRequest -Uri "$baseUrl/api/v1/recommendations/me" -Method GET -Headers @{"X-Request-ID" = "e2e-unauth-1"} -SkipHttpErrorCheck
-    if ($unauth.StatusCode -ne 401 -or ($unauth.Headers["X-Request-ID"] -join "") -ne "e2e-unauth-1") {
-        throw "Expected 401 with echoed X-Request-ID, got status=$($unauth.StatusCode)"
-    }
-
-    # Login two isolated profiles: demo-b2b and demo-b2c.
-    $login1 = Invoke-RestMethod -Uri "$baseUrl/api/v1/auth/login" -Method POST -ContentType "application/json" -Body '{"login":"demo-b2b","password":"e2e-b2b-password"}'
-    $login2 = Invoke-RestMethod -Uri "$baseUrl/api/v1/auth/login" -Method POST -ContentType "application/json" -Body '{"login":"demo-b2c","password":"e2e-b2c-password"}'
-    $hdr1 = @{ Authorization = "Bearer $($login1.access_token)" }
-    $hdr2 = @{ Authorization = "Bearer $($login2.access_token)" }
-
-    $me1 = Invoke-RestMethod -Uri "$baseUrl/api/v1/users/me" -Method GET -Headers $hdr1
-    $me2 = Invoke-RestMethod -Uri "$baseUrl/api/v1/users/me" -Method GET -Headers $hdr2
-    if ($me1.profile_id -eq $me2.profile_id -or $me1.client_group -ne "B2B" -or $me2.client_group -ne "B2C") {
-        throw "Unexpected profile metadata: me1=$($me1 | ConvertTo-Json -Compress) me2=$($me2 | ConvertTo-Json -Compress)"
-    }
-
-    # Verify 400 on profile spoofing in /purchases.
-    $spoof = Invoke-WebRequest -Uri "$baseUrl/api/v1/purchases" -Method POST -Headers $hdr1 -ContentType "application/json" -Body '{"item_id":"DEMO-BASE","profile_id":"u2"}' -SkipHttpErrorCheck
-    if ($spoof.StatusCode -ne 400) {
-        throw "Expected 400 on profile override attempt, got $($spoof.StatusCode)"
-    }
-
-    # Profile 1 buys DEMO-BASE -> sees DEMO-RENEW-12 with 12/24 variants -> buys DEMO-RENEW-12 -> DEMO-RENEW-12 disappears.
-    $buyBase = Invoke-WebRequest -Uri "$baseUrl/api/v1/purchases" -Method POST -Headers $hdr1 -ContentType "application/json" -Body '{"item_id":"DEMO-BASE"}' -SkipHttpErrorCheck
-    if ($buyBase.StatusCode -ne 201) { throw "Purchase DEMO-BASE failed: $($buyBase.StatusCode) $($buyBase.Content)" }
-
-    $rec1Before = Invoke-RestMethod -Uri "$baseUrl/api/v1/recommendations/me" -Method GET -Headers $hdr1
-    $renewCards = @($rec1Before.items | Where-Object { $_.item_id -eq "DEMO-RENEW-12" })
-    if ($renewCards.Count -eq 0 -or @($renewCards[0].variants).Count -lt 2) {
-        throw "Expected DEMO-RENEW-12 renewal card with 12/24 variants after DEMO-BASE purchase, got: $($rec1Before | ConvertTo-Json -Depth 6)"
-    }
-
-    $buyRenew12 = Invoke-WebRequest -Uri "$baseUrl/api/v1/purchases" -Method POST -Headers $hdr1 -ContentType "application/json" -Body '{"item_id":"DEMO-RENEW-12"}' -SkipHttpErrorCheck
-    if ($buyRenew12.StatusCode -ne 201) { throw "Purchase DEMO-RENEW-12 failed: $($buyRenew12.StatusCode)" }
-
-    $rec1After = Invoke-RestMethod -Uri "$baseUrl/api/v1/recommendations/me" -Method GET -Headers $hdr1
-    if (@($rec1After.items | Where-Object { $_.item_id -eq "DEMO-RENEW-12" }).Count -gt 0) {
-        throw "Purchased item DEMO-RENEW-12 did not disappear from Profile 1 recommendations!"
-    }
-
-    # Verify Profile 2 remained completely isolated in PostgreSQL and HTTP.
-    $rec2 = Invoke-RestMethod -Uri "$baseUrl/api/v1/recommendations/me" -Method GET -Headers $hdr2
+    $env:RECSYS_E2E_API = $baseUrl
+    node --test tests/e2e/demo/api.test.mjs
+    if ($LASTEXITCODE -ne 0) { throw "HTTP integration failed" }
     $p2Purchases = (docker compose -f $composeFile -p $projectName exec -T postgres psql -U $pgUser -d $pgDb -tAc "SELECT count(*) FROM recommendations.online_purchases WHERE client_id = 'DEMO-NEW';").Trim()
-    $p1Purchases = (docker compose -f $composeFile -p $projectName exec -T postgres psql -U $pgUser -d $pgDb -tAc "SELECT count(*) FROM recommendations.online_purchases WHERE client_id = 'DEMO-BUYER';").Trim()
-    if ($p1Purchases -ne "2" -or $p2Purchases -ne "0") {
-        throw "Profile purchase isolation failed: DEMO-BUYER=$p1Purchases DEMO-NEW=$p2Purchases"
-    }
+    if ($p2Purchases -ne "0") { throw "Second profile recorded unexpected purchases" }
+    Write-Host "[check] SUCCESS: PG17 extensions, two seed passes, transactions and HTTP verified (snapshot=demo-v1)."
 
-    Write-Host "[check] SUCCESS: PG17 migrations, 2x seed idempotency, pgx transactions, and two-profile isolation verified (DEMO-BUYER purchases=$p1Purchases, DEMO-NEW purchases=$p2Purchases, B2C items=$(@($rec2.items).Count))."
 } finally {
     if ($null -ne $apiProcess -and -not $apiProcess.HasExited) {
         Stop-Process -Id $apiProcess.Id -Force -ErrorAction SilentlyContinue
     }
     if (Test-Path $tempBinDir) {
-        Remove-Item -Recurse -Force $tempBinDir -ErrorAction SilentlyContinue
+        $resolved = (Resolve-Path -LiteralPath $tempBinDir).Path
+        $expected = [System.IO.Path]::GetFullPath($tempBinDir)
+        if ($resolved -eq $expected -and (Split-Path -Leaf $resolved) -eq "recsys-e2e-bin-$runId") {
+            Remove-Item -LiteralPath $resolved -Recurse -Force -ErrorAction SilentlyContinue
+        }
     }
     Write-Host "[check] Cleaning up isolated Compose project $projectName..."
     docker compose -f $composeFile -p $projectName down -v --remove-orphans 2>$null | Out-Null

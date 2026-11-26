@@ -264,6 +264,7 @@ func EvaluateRecommender(
 				sliceRes.Metrics.Full3Rate++
 			}
 			sliceRes.Metrics.Precision += float64(clientHits)
+			sliceRes.Metrics.Hits += clientHits
 			sliceRes.Families.TotalHits += clientFamilies.TotalHits
 			sliceRes.Families.KnownFamilyHits += clientFamilies.KnownFamilyHits
 			sliceRes.Families.NewFamilyHits += clientFamilies.NewFamilyHits

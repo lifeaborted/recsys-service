@@ -16,7 +16,9 @@ import (
 	"time"
 
 	"recsys/internal/data"
+	"recsys/internal/domain"
 	"recsys/internal/eval"
+	"recsys/internal/recommend"
 	"recsys/internal/store/postgres"
 )
 
@@ -30,6 +32,7 @@ type backtestOutput struct {
 	Summary               eval.DatasetSummary `json:"summary"`
 	Baselines             []eval.Result       `json:"baselines"`
 	LeakageWarnings       []string            `json:"leakage_warnings"`
+	Hybrid                *eval.HybridReport  `json:"hybrid,omitempty"`
 	HybridStatus          string              `json:"hybrid_status"`
 }
 
@@ -40,13 +43,14 @@ func main() {
 	checkAnon := flag.Bool("check-anonymization", false, "проверить пороги обезличивания (>=3 / >=5)")
 	showCold := flag.Bool("show-cold-items", false, "показать список item_id холодных товаров (не для публичного отчёта)")
 	format := flag.String("format", "table", "формат вывода: table или json")
+	snapshot := flag.String("snapshot", "", "immutable v4 snapshot ID for hybrid evaluation")
 	flag.Parse()
 
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, nil))
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
-	if err := run(ctx, logger, *clientsPath, *salesPath, *label, *checkAnon, *showCold, *format); err != nil {
+	if err := run(ctx, logger, *clientsPath, *salesPath, *label, *checkAnon, *showCold, *format, *snapshot); err != nil {
 		logger.Error("backtest failed", "error", err)
 		fmt.Fprintln(os.Stderr, "backtest:", err)
 		os.Exit(1)
@@ -58,7 +62,7 @@ func run(
 	logger *slog.Logger,
 	clientsPath, salesPath, label string,
 	checkAnon, showCold bool,
-	format string,
+	format, snapshot string,
 ) error {
 	if (clientsPath != "") != (salesPath != "") {
 		return errors.New("для CSV-режима укажите одновременно -clients и -sales")
@@ -71,9 +75,12 @@ func run(
 	out.TrainThrough = eval.TrainThrough
 	out.TestFrom = ">" + eval.TrainThrough
 	out.LeakageWarnings = eval.DefaultLeakageWarnings()
-	out.HybridStatus = "not_wired: требуется реализация contract.Recommender (зона 2) и метод чтения снимка/каталога в store/postgres (зона 4); логика оценки проверена в TestDataModule"
+	out.HybridStatus = "baseline only; supply -snapshot for a pinned v4 hybrid run"
 
 	if clientsPath != "" {
+		if snapshot != "" {
+			return fmt.Errorf("-snapshot requires v4 PostgreSQL mode")
+		}
 		if strings.TrimSpace(label) == "" {
 			label = "demo"
 		}
@@ -113,7 +120,7 @@ func run(
 		}
 		logger.Info("connecting to v4 database", "dsn", data.MaskDSN(dsn))
 
-		store, err := postgres.Open(dsn)
+		store, err := postgres.OpenContext(ctx, dsn)
 		if err != nil {
 			return fmt.Errorf("открыть БД: %w", err)
 		}
@@ -130,9 +137,55 @@ func run(
 		out.Dataset = label
 		out.WorkbookSHA256 = sha
 		out.HasProductGroupColumn = false
-		out.FeedGeneratedAt = "unavailable via EvaluationV4 (обновлённой БД v5 с product_group пока нет; см. tests/e2e/data/README.md)"
+		out.FeedGeneratedAt = "not used in the sales-only snapshot"
 		out.Summary = summary
 		out.Baselines = eval.Baselines(sales)
+		if snapshot != "" {
+			meta, err := store.SnapshotMetadata(ctx, snapshot)
+			if err != nil {
+				return err
+			}
+			if meta.DatasetVersion != "v4" || meta.WorkbookSHA256 != sha || meta.TrainThrough.Format(time.DateOnly) != eval.TrainThrough {
+				return fmt.Errorf("snapshot does not match v4 release and train cutoff")
+			}
+			batch, err := store.OfflineDataset(ctx)
+			if err != nil {
+				return err
+			}
+			allowed := eval.AllowedItemsFromSales(batch.Sales)
+			if len(allowed) != 817 {
+				return fmt.Errorf("expected 817 historical items, got %d", len(allowed))
+			}
+			ids := make([]domain.ItemID, 0, len(allowed))
+			for id := range allowed {
+				ids = append(ids, id)
+			}
+			products, err := store.Products(ctx, snapshot, ids)
+			if err != nil {
+				return err
+			}
+			families := make(map[domain.ItemID]string)
+			for id, p := range products {
+				if p.FamilySource != "" && p.FamilyID != "" {
+					families[id] = p.FamilyID
+				}
+			}
+			report, err := eval.EvaluateRecommender(ctx, recommend.New(store), batch.Clients, batch.Sales, eval.BacktestConfig{
+				DatasetLabel: "v4", SnapshotID: snapshot, AllowedItems: allowed, ItemFamilies: families, FeedGeneratedAt: meta.FeedGeneratedAt,
+			})
+			if err != nil {
+				return err
+			}
+			if !showCold {
+				report.Cold.ColdItems = nil
+				report.Summary.ColdItems = nil
+			}
+			out.Hybrid = &report
+			out.HybridStatus = "completed"
+			if meta.FeedGeneratedAt != nil {
+				out.FeedGeneratedAt = meta.FeedGeneratedAt.Format(time.RFC3339)
+			}
+		}
 		logger.Info("v4 backtest completed",
 			"sha256", sha,
 			"rows", summary.Rows,
@@ -183,5 +236,12 @@ func printOutput(out backtestOutput, showCold bool, format string) error {
 		fmt.Printf("  - %s\n", w)
 	}
 	fmt.Printf("hybrid_eval: %s\n", out.HybridStatus)
+	if out.Hybrid != nil {
+		fmt.Printf("snapshot_id=%s\n", out.Hybrid.SnapshotID)
+		for _, r := range out.Hybrid.Results {
+			fmt.Printf("%s %s clients=%d P@3=%.2f%% hits=%d variant=%.2f%% new=%.2f%% unknown=%.2f%%\n", r.Cohort, r.Group, r.Clients, r.Metrics.Precision, r.Metrics.Hits,
+				r.Families.KnownFamilyShare(), r.Families.NewFamilyShare(), r.Families.UnknownFamilyShare())
+		}
+	}
 	return nil
 }

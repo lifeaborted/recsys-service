@@ -273,6 +273,13 @@ func (s *Store) PublishItemFeatures(ctx context.Context, featureVersion string, 
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
+	if err := writeItemFeatures(ctx, tx, fv, features); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+func writeItemFeatures(ctx context.Context, tx pgx.Tx, fv string, features []ItemFeature) error {
 	if _, err := tx.Exec(ctx, `DELETE FROM recommendations.item_feature_versions WHERE feature_version = $1`, fv); err != nil {
 		return err
 	}
@@ -314,12 +321,23 @@ func (s *Store) PublishItemFeatures(ctx context.Context, featureVersion string, 
 			return fmt.Errorf("insert item_feature_versions %s: %w", f.ItemID, err)
 		}
 	}
-	return tx.Commit(ctx)
+	return nil
 }
 
 // PublishSnapshot atomically publishes a completed snapshot bound to dataset_release (version + workbook_sha256).
 // Candidates without catalog offers retain their canonical item_id.
 func (s *Store) PublishSnapshot(ctx context.Context, snapshot contract.Snapshot) error {
+	return s.publishSnapshot(ctx, snapshot, nil, nil)
+}
+
+func (s *Store) PublishSnapshotWithFeatures(ctx context.Context, snapshot contract.Snapshot, features []ItemFeature, feed CatalogFeedBatch) error {
+	if features == nil {
+		features = []ItemFeature{}
+	}
+	return s.publishSnapshot(ctx, snapshot, features, &feed)
+}
+
+func (s *Store) publishSnapshot(ctx context.Context, snapshot contract.Snapshot, features []ItemFeature, feed *CatalogFeedBatch) error {
 	snapID := strings.TrimSpace(snapshot.ID)
 	dsVer := strings.TrimSpace(snapshot.DatasetVersion)
 	if snapID == "" || dsVer == "" || snapshot.TrainThrough.IsZero() {
@@ -351,6 +369,35 @@ func (s *Store) PublishSnapshot(ctx context.Context, snapshot contract.Snapshot)
 	featureVer := strings.TrimSpace(snapshot.CatalogVersion)
 	if featureVer == "" {
 		featureVer = snapID
+	}
+
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(5042026)`); err != nil {
+		return err
+	}
+	if feed != nil {
+		if feed.CatalogVersion != snapshot.CatalogVersion || feed.SourceURL == "" || feed.GeneratedAt.IsZero() {
+			return fmt.Errorf("invalid snapshot feed metadata")
+		}
+		if _, err := tx.Exec(ctx, `INSERT INTO recommendations.catalog_feed_versions (catalog_version,source_url,feed_generated_at)
+   VALUES ($1,$2,$3) ON CONFLICT (catalog_version) DO NOTHING`, feed.CatalogVersion, feed.SourceURL, feed.GeneratedAt); err != nil {
+			return err
+		}
+		var consistent bool
+		if err := tx.QueryRow(ctx, `SELECT source_url=$2 AND feed_generated_at=$3
+   FROM recommendations.catalog_feed_versions WHERE catalog_version=$1`, feed.CatalogVersion, feed.SourceURL, feed.GeneratedAt).Scan(&consistent); err != nil {
+			return err
+		}
+		if !consistent {
+			return fmt.Errorf("catalog version already has different metadata")
+		}
+	}
+
+	if features != nil {
+		// Key features by snapshot so publishing a new batch cannot change old readers.
+		featureVer = snapID
+		if err := writeItemFeatures(ctx, tx, featureVer, features); err != nil {
+			return err
+		}
 	}
 
 	if _, err := tx.Exec(ctx, `UPDATE recommendations.model_snapshots SET is_active = false WHERE is_active`); err != nil {
@@ -512,17 +559,10 @@ func (s *Store) History(ctx context.Context, clientID domain.ClientID, throughWe
 		cutoff := throughWeek.UTC().Format("2006-01-02")
 		rows, err = s.pool.Query(ctx, `
 			SELECT excel_row, order_id, client_id, order_week, item_id, sku, COALESCE(item_name, '')
-			FROM (
-				SELECT s.excel_row, s.order_id, s.client_id, s.order_week, s.item_id, s.sku, s.item_name, 0 AS src_ord
-				FROM recommendations.sales s
-				WHERE s.client_id = $1 AND s.order_week <= $2::date
-				UNION ALL
-				SELECT (100000000 + p.purchase_id)::int AS excel_row, p.order_id, p.client_id, p.purchased_week AS order_week, p.item_id, p.sku, p.item_name, 1 AS src_ord
-				FROM recommendations.online_purchases p
-				WHERE p.client_id = $1 AND p.purchased_week <= $2::date
-			) combined
-			ORDER BY order_week ASC, src_ord ASC, excel_row ASC
-		`, string(clientID), cutoff)
+   FROM recommendations.sales
+   WHERE client_id = $1 AND order_week <= $2::date
+   ORDER BY order_week ASC, excel_row ASC
+  `, string(clientID), cutoff)
 	}
 	if err != nil {
 		return nil, err

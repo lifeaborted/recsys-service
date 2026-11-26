@@ -20,6 +20,7 @@ func pools(c domain.Client, history []domain.ItemID, mode contract.Mode) []pool 
 		}
 		if c.Group == domain.B2B {
 			add("renewal", 10, domain.Renewal)
+			add("upgrade", 9, domain.Upgrade)
 			add("transition", 9, domain.Behavioral)
 		} else {
 			add("complement", 10, domain.Complement)
