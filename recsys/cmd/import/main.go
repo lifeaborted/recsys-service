@@ -1,250 +1,166 @@
-// Импорт данных из pg_dump (COPY ... FROM stdin) без psql.
+// Команда импорта и проверки наборов данных (clients.csv + sales.csv) и закрытого релиза v4.
 //
-//	go run ./cmd/import -file E:\recommendations.sql -truncate
-//	go run ./cmd/import -file E:\recommendations.sql -truncate -only=catalog_offers,clients -max-rows=5000
+//	go run ./cmd/import -clients testdata/smoke/clients.csv -sales testdata/smoke/sales.csv -version demo -dry-run
+//	go run ./cmd/import -verify-v4
 package main
 
 import (
-	"bufio"
 	"context"
-	"database/sql"
+	"errors"
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
-	"regexp"
-	"strings"
 	"time"
 
-	"github.com/lib/pq"
-
-	"recsys/internal/config"
+	"recsys/internal/contract"
+	"recsys/internal/data"
+	"recsys/internal/eval"
+	"recsys/internal/store/postgres"
 )
 
-var (
-	copyHeader = regexp.MustCompile(`^COPY "recommendations"\."([^"]+)" \(([^)]+)\) FROM stdin;$`)
-	columnName = regexp.MustCompile(`"([^"]+)"`)
-)
+type dryRunWriter struct {
+	version string
+	batches int
+}
+
+func (w *dryRunWriter) WriteDataset(ctx context.Context, version string, batches []contract.DatasetBatch) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	w.version = version
+	w.batches = len(batches)
+	return nil
+}
 
 func main() {
-	dumpPath := flag.String("file", "recommendations.sql", "путь к pg_dump")
-	truncate := flag.Bool("truncate", false, "очистить таблицы перед импортом")
-	only := flag.String("only", "", "через запятую: какие таблицы импортировать")
-	maxRows := flag.Int("max-rows", 0, "максимум строк на таблицу (0 — все)")
+	clientsPath := flag.String("clients", "", "путь к clients.csv")
+	salesPath := flag.String("sales", "", "путь к sales.csv")
+	version := flag.String("version", "demo-v1", "версия набора данных для DatasetWriter")
+	batchSize := flag.Int("batch-size", data.DefaultBatchSize, "размер партии для contract.DatasetWriter")
+	checkAnon := flag.Bool("check-anonymization", false, "проверить пороги обезличивания (>=3 покупателей, >=5 физлиц для B2C)")
+	dryRun := flag.Bool("dry-run", false, "проверить CSV и сформировать партии без записи в PostgreSQL")
+	verifyV4 := flag.Bool("verify-v4", false, "проверить закрытую БД v4 (recommendations.dataset_release, sales, clients)")
 	flag.Parse()
 
-	if err := run(*dumpPath, *truncate, *only, *maxRows); err != nil {
+	logger := slog.New(slog.NewJSONHandler(os.Stderr, nil))
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	if err := run(ctx, logger, options{
+		clientsPath: *clientsPath,
+		salesPath:   *salesPath,
+		version:     *version,
+		batchSize:   *batchSize,
+		checkAnon:   *checkAnon,
+		dryRun:      *dryRun,
+		verifyV4:    *verifyV4,
+	}); err != nil {
+		logger.Error("import failed", "error", err)
 		fmt.Fprintln(os.Stderr, "import:", err)
 		os.Exit(1)
 	}
 }
 
-func run(dumpPath string, truncate bool, only string, maxRows int) error {
-	cfg := config.Load()
+type options struct {
+	clientsPath string
+	salesPath   string
+	version     string
+	batchSize   int
+	checkAnon   bool
+	dryRun      bool
+	verifyV4    bool
+}
 
-	file, err := os.Open(dumpPath)
-	if err != nil {
-		return fmt.Errorf("открыть дамп %s: %w", dumpPath, err)
+func run(ctx context.Context, logger *slog.Logger, opts options) error {
+	if opts.verifyV4 {
+		return verifyClosedV4(ctx, logger)
 	}
-	defer file.Close()
+	if opts.clientsPath == "" || opts.salesPath == "" {
+		return errors.New("укажите -clients и -sales для CSV-импорта или -verify-v4 для проверки закрытой базы")
+	}
 
-	db, err := sql.Open("postgres", cfg.DatabaseURL)
+	ds, err := data.LoadCSV(ctx, opts.clientsPath, opts.salesPath)
 	if err != nil {
 		return err
 	}
-	defer db.Close()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
-	defer cancel()
-	if err := db.PingContext(ctx); err != nil {
-		return fmt.Errorf("подключиться к БД: %w", err)
-	}
-
-	selected := make(map[string]bool)
-	if only != "" {
-		for _, name := range strings.Split(only, ",") {
-			selected[strings.TrimSpace(name)] = true
-		}
-	}
-
-	if truncate {
-		if err := truncateAll(ctx, db); err != nil {
-			return err
-		}
-		fmt.Println("- таблицы очищены")
-	}
-
-	scanner := bufio.NewScanner(file)
-	scanner.Buffer(make([]byte, 1024*1024), 32*1024*1024)
-
-	started := time.Now()
-	total := int64(0)
-	for scanner.Scan() {
-		match := copyHeader.FindStringSubmatch(scanner.Text())
-		if match == nil {
-			continue // DDL применяет cmd/migration up
-		}
-		table := match[1]
-		if len(selected) > 0 && !selected[table] {
-			if err := skipBlock(scanner); err != nil {
-				return err
-			}
-			continue
-		}
-
-		columns := columnName.FindAllStringSubmatch(match[2], -1)
-		names := make([]string, 0, len(columns))
-		for _, col := range columns {
-			names = append(names, col[1])
-		}
-		count, err := importBlock(ctx, db, table, names, scanner, maxRows)
+	if opts.checkAnon {
+		anon, err := data.CheckAnonymization(ds.Clients, ds.Sales)
 		if err != nil {
 			return err
 		}
-		total += count
-		fmt.Printf("+ %-28s %d строк\n", table, count)
+		logger.Info("anonymization verified", "items", anon.ItemsChecked, "min_buyers", anon.MinItemBuyers, "min_b2c_buyers", anon.MinB2CBuyers)
 	}
-	if err := scanner.Err(); err != nil {
+
+	if !opts.dryRun {
+		return errors.New("SQL-адаптер contract.DatasetWriter принадлежит зоне 4 (internal/store/postgres); используйте -dry-run для проверки CSV или см. tests/e2e/data/HANDOFF.md")
+	}
+
+	cf, err := os.Open(opts.clientsPath)
+	if err != nil {
+		return fmt.Errorf("повторно открыть %q: %w", opts.clientsPath, err)
+	}
+	defer cf.Close()
+	sf, err := os.Open(opts.salesPath)
+	if err != nil {
+		return fmt.Errorf("повторно открыть %q: %w", opts.salesPath, err)
+	}
+	defer sf.Close()
+
+	writer := &dryRunWriter{}
+	summary, err := data.ImportCSV(ctx, opts.version, cf, sf, writer, opts.batchSize)
+	if err != nil {
 		return err
 	}
-	fmt.Printf("Готово: %d строк за %s\n", total, time.Since(started).Round(time.Second))
+
+	logger.Info("csv dry-run completed",
+		"version", summary.Version,
+		"clients", summary.Clients,
+		"sales", summary.Sales,
+		"batches", summary.Batches,
+		"items", summary.DistinctItems,
+		"empty_sku_rows", summary.EmptySKURows,
+	)
+	fmt.Printf("import dry-run ok: version=%s clients=%d sales=%d batches=%d items=%d empty_sku=%d\n",
+		summary.Version, summary.Clients, summary.Sales, summary.Batches, summary.DistinctItems, summary.EmptySKURows)
 	return nil
 }
 
-func truncateAll(ctx context.Context, db *sql.DB) error {
-	rows, err := db.QueryContext(ctx,
-		"SELECT tablename FROM pg_tables WHERE schemaname = 'recommendations'")
+func verifyClosedV4(ctx context.Context, logger *slog.Logger) error {
+	dsn, err := data.ResolveDatabaseURL()
 	if err != nil {
 		return err
 	}
-	var tables []string
-	for rows.Next() {
-		var name string
-		if err := rows.Scan(&name); err != nil {
-			rows.Close()
-			return err
-		}
-		tables = append(tables, "recommendations."+pq.QuoteIdentifier(name))
+	logger.Info("verifying closed v4 release", "dsn", data.MaskDSN(dsn))
+
+	store, err := postgres.Open(dsn)
+	if err != nil {
+		return fmt.Errorf("открыть store: %w", err)
 	}
-	if err := rows.Close(); err != nil {
+	defer store.Close()
+
+	sha, sales, err := store.EvaluationV4(ctx)
+	if err != nil {
+		return fmt.Errorf("прочитать закрытую базу v4: %w", err)
+	}
+	summary, anon, err := eval.VerifyV4Evaluation(sha, sales)
+	if err != nil {
 		return err
 	}
-	if len(tables) == 0 {
-		return fmt.Errorf("схема recommendations пуста — сначала cmd/migration up")
-	}
-	_, err = db.ExecContext(ctx, "TRUNCATE TABLE "+strings.Join(tables, ", ")+" RESTART IDENTITY CASCADE")
-	return err
-}
 
-func skipBlock(scanner *bufio.Scanner) error {
-	for scanner.Scan() {
-		if scanner.Text() == `\.` {
-			return nil
-		}
-	}
-	if err := scanner.Err(); err != nil {
-		return err
-	}
-	return fmt.Errorf("не найден конец COPY-блока")
-}
-
-func importBlock(
-	ctx context.Context,
-	db *sql.DB,
-	table string,
-	columns []string,
-	scanner *bufio.Scanner,
-	maxRows int,
-) (int64, error) {
-	tx, err := db.BeginTx(ctx, nil)
-	if err != nil {
-		return 0, err
-	}
-	// pg_dump выдаёт таблицы не в топологическом порядке, а FK уже созданы.
-	if _, err := tx.ExecContext(ctx, "SET LOCAL session_replication_role = replica"); err != nil {
-		_ = tx.Rollback()
-		return 0, fmt.Errorf("отключить FK: %w", err)
-	}
-
-	stmt, err := tx.PrepareContext(ctx, pq.CopyInSchema("recommendations", table, columns...))
-	if err != nil {
-		_ = tx.Rollback()
-		return 0, fmt.Errorf("%s: CopyIn: %w", table, err)
-	}
-
-	var count int64
-	limitReached := false
-	for scanner.Scan() {
-		line := scanner.Text()
-		if line == `\.` {
-			break
-		}
-		if limitReached || (maxRows > 0 && count >= int64(maxRows)) {
-			limitReached = true
-			continue
-		}
-		parts := strings.Split(line, "\t")
-		values := make([]any, len(parts))
-		for i, part := range parts {
-			values[i] = decodeField(part)
-		}
-		if _, err := stmt.ExecContext(ctx, values...); err != nil {
-			stmt.Close()
-			_ = tx.Rollback()
-			return count, fmt.Errorf("%s: строка %d: %w", table, count+1, err)
-		}
-		count++
-	}
-	if err := scanner.Err(); err != nil {
-		stmt.Close()
-		_ = tx.Rollback()
-		return count, err
-	}
-	if _, err := stmt.ExecContext(ctx); err != nil {
-		stmt.Close()
-		_ = tx.Rollback()
-		return count, fmt.Errorf("%s: закрыть COPY: %w", table, err)
-	}
-	if err := stmt.Close(); err != nil {
-		_ = tx.Rollback()
-		return count, err
-	}
-	if err := tx.Commit(); err != nil {
-		return count, fmt.Errorf("%s: commit: %w", table, err)
-	}
-	return count, nil
-}
-
-func decodeField(value string) any {
-	if value == `\N` {
-		return nil
-	}
-	if !strings.ContainsRune(value, '\\') {
-		return value
-	}
-	var builder strings.Builder
-	runes := []rune(value)
-	for i := 0; i < len(runes); i++ {
-		if runes[i] != '\\' || i+1 >= len(runes) {
-			builder.WriteRune(runes[i])
-			continue
-		}
-		i++
-		switch runes[i] {
-		case 'n':
-			builder.WriteRune('\n')
-		case 'r':
-			builder.WriteRune('\r')
-		case 't':
-			builder.WriteRune('\t')
-		case 'b':
-			builder.WriteRune('\b')
-		case 'f':
-			builder.WriteRune('\f')
-		case 'v':
-			builder.WriteRune('\v')
-		default:
-			builder.WriteRune(runes[i])
-		}
-	}
-	return builder.String()
+	logger.Info("closed v4 release verified",
+		"sha256", sha,
+		"rows", summary.Rows,
+		"clients", summary.UniqueClients,
+		"baskets", summary.Baskets,
+		"items", summary.TotalItems,
+		"train_items", summary.TrainItems,
+		"cold_items", len(summary.ColdItems),
+		"min_buyers", anon.MinItemBuyers,
+		"min_b2c_buyers", anon.MinB2CBuyers,
+	)
+	fmt.Printf("v4 verified: sha256=%s rows=%d clients=%d baskets=%d items=%d train_items=%d cold_items=%d min_buyers=%d min_b2c_buyers=%d\n",
+		sha, summary.Rows, summary.UniqueClients, summary.Baskets, summary.TotalItems,
+		summary.TrainItems, len(summary.ColdItems), anon.MinItemBuyers, anon.MinB2CBuyers)
+	return nil
 }

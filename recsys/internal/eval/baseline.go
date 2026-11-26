@@ -2,7 +2,10 @@ package eval
 
 import (
 	"cmp"
+	"fmt"
 	"slices"
+
+	"recsys/internal/domain"
 )
 
 const (
@@ -17,6 +20,7 @@ type Sale struct {
 type Metrics struct {
 	Precision float64
 	FillRate  float64
+	Full3Rate float64
 }
 
 type Result struct {
@@ -25,10 +29,101 @@ type Result struct {
 	Popularity, CoPurchase Metrics
 }
 
+// DatasetSummary captures aggregate counts and cold-start split diagnostics.
+type DatasetSummary struct {
+	Rows           int
+	UniqueClients  int
+	Baskets        int
+	TotalItems     int
+	TrainItems     int
+	ColdItems      []string
+	CohortAClients int
+	CohortBClients int
+}
+
 type itemSet map[string]struct{}
 
 type basketKey struct {
 	order, week string
+}
+
+// SalesFromDomain converts normalized domain clients and sales into eval.Sale rows,
+// retaining clients without LK access and items without SKU or catalog match.
+func SalesFromDomain(clients []domain.Client, sales []domain.Sale) ([]Sale, error) {
+	groups := make(map[domain.ClientID]string, len(clients))
+	for _, c := range clients {
+		groups[c.ID] = string(c.Group)
+	}
+	out := make([]Sale, 0, len(sales))
+	for _, s := range sales {
+		group, ok := groups[s.ClientID]
+		if !ok {
+			return nil, fmt.Errorf("sale row %d references unknown client_id %q", s.SourceRow, s.ClientID)
+		}
+		out = append(out, Sale{
+			OrderID:  s.OrderID,
+			ClientID: string(s.ClientID),
+			Week:     s.OrderWeek.UTC().Format("2006-01-02"),
+			ItemID:   string(s.ItemID),
+			Group:    group,
+		})
+	}
+	return out, nil
+}
+
+// SummarizeDataset computes dataset dimensions, train/cold item split, and cohort counts.
+func SummarizeDataset(sales []Sale) DatasetSummary {
+	clients := make(map[string]struct{})
+	baskets := make(map[basketKey]struct{})
+	allItems := make(itemSet)
+	trainItems := make(itemSet)
+	testItems := make(itemSet)
+	train := make(map[string]itemSet)
+	test := make(map[string]itemSet)
+
+	for _, sale := range sales {
+		clients[sale.ClientID] = struct{}{}
+		baskets[basketKey{sale.OrderID, sale.Week}] = struct{}{}
+		allItems[sale.ItemID] = struct{}{}
+		if sale.Week <= TrainThrough {
+			trainItems[sale.ItemID] = struct{}{}
+			add(train, sale.ClientID, sale.ItemID)
+		} else {
+			testItems[sale.ItemID] = struct{}{}
+			add(test, sale.ClientID, sale.ItemID)
+		}
+	}
+
+	var cold []string
+	for item := range testItems {
+		if _, inTrain := trainItems[item]; !inTrain {
+			cold = append(cold, item)
+		}
+	}
+	slices.Sort(cold)
+
+	cohortA, cohortB := 0, 0
+	for client, bought := range test {
+		seen := train[client]
+		if len(seen) == 0 || !hasNewItem(bought, seen) {
+			continue
+		}
+		cohortA++
+		if len(seen) == 1 {
+			cohortB++
+		}
+	}
+
+	return DatasetSummary{
+		Rows:           len(sales),
+		UniqueClients:  len(clients),
+		Baskets:        len(baskets),
+		TotalItems:     len(allItems),
+		TrainItems:     len(trainItems),
+		ColdItems:      cold,
+		CohortAClients: cohortA,
+		CohortBClients: cohortB,
+	}
 }
 
 func Baselines(sales []Sale) []Result {
@@ -99,6 +194,7 @@ func Baselines(sales []Sale) []Result {
 			if result.Clients > 0 {
 				m.Precision *= 100 / (TopK * float64(result.Clients))
 				m.FillRate *= 100 / float64(result.Clients)
+				m.Full3Rate *= 100 / float64(result.Clients)
 			}
 		}
 	}
@@ -143,6 +239,9 @@ func topItems(scores, popularity map[string]int, seen itemSet) []string {
 func record(m *Metrics, ranked []string, bought itemSet) {
 	if len(ranked) > 0 {
 		m.FillRate++
+	}
+	if len(ranked) == TopK {
+		m.Full3Rate++
 	}
 	for _, item := range ranked {
 		if _, hit := bought[item]; hit {
