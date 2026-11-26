@@ -24,3 +24,6 @@ recsys/input/
 /bin/
 recsys/bin/
 *.exe
+
+# Local-only handoff notes (kept out of git repository)
+recsys/tests/e2e/data/HANDOFF.md

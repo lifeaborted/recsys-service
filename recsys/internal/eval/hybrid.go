@@ -18,10 +18,12 @@ type Backtest interface {
 }
 
 // BacktestConfig defines snapshot pinning, dataset labeling, candidate restriction, and family metadata.
+// ProductGroups holds the canonical v5 item_id -> product_group mapping (takes precedence over FamilyID).
 type BacktestConfig struct {
 	DatasetLabel    string
 	SnapshotID      string
 	AllowedItems    map[domain.ItemID]struct{}
+	ProductGroups   map[domain.ItemID]string
 	ItemFamilies    map[domain.ItemID]string
 	FeedGeneratedAt *time.Time
 }
@@ -204,7 +206,7 @@ func EvaluateRecommender(
 			topCards = topCards[:TopK]
 		}
 
-		seenFamilies := clientSeenFamilies(seen, cfg.ItemFamilies)
+		seenFamilies := clientSeenFamilies(seen, cfg.ProductGroups, cfg.ItemFamilies)
 		countedHits := make(itemSet, TopK)
 		clientHits := 0
 		var clientFamilies FamilyBreakdown
@@ -236,7 +238,7 @@ func EvaluateRecommender(
 				}
 			}
 
-			fam := resolveCardFamily(card, cfg.ItemFamilies)
+			fam := resolveCardFamily(card, cfg.ProductGroups, cfg.ItemFamilies)
 			clientFamilies.TotalHits++
 			switch {
 			case fam == "":
@@ -295,27 +297,39 @@ func EvaluateRecommender(
 	}, nil
 }
 
-func clientSeenFamilies(seen itemSet, itemFamilies map[domain.ItemID]string) map[string]bool {
+func clientSeenFamilies(seen itemSet, productGroups, itemFamilies map[domain.ItemID]string) map[string]bool {
 	out := make(map[string]bool)
-	if len(itemFamilies) == 0 {
+	if len(productGroups) == 0 && len(itemFamilies) == 0 {
 		return out
 	}
 	for item := range seen {
-		if fam := strings.TrimSpace(itemFamilies[domain.ItemID(item)]); fam != "" {
+		id := domain.ItemID(item)
+		if pg := strings.TrimSpace(productGroups[id]); pg != "" {
+			out[pg] = true
+			continue
+		}
+		if fam := strings.TrimSpace(itemFamilies[id]); fam != "" {
 			out[fam] = true
 		}
 	}
 	return out
 }
 
-func resolveCardFamily(card domain.Recommendation, itemFamilies map[domain.ItemID]string) string {
+func resolveCardFamily(card domain.Recommendation, productGroups, itemFamilies map[domain.ItemID]string) string {
+	if len(productGroups) > 0 {
+		if pg := strings.TrimSpace(productGroups[card.ItemID]); pg != "" {
+			return pg
+		}
+	}
+	if len(itemFamilies) > 0 {
+		if fam := strings.TrimSpace(itemFamilies[card.ItemID]); fam != "" {
+			return fam
+		}
+	}
 	if card.FamilyID != nil {
 		if fam := strings.TrimSpace(*card.FamilyID); fam != "" {
 			return fam
 		}
-	}
-	if len(itemFamilies) > 0 {
-		return strings.TrimSpace(itemFamilies[card.ItemID])
 	}
 	return ""
 }

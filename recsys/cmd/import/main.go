@@ -1,4 +1,4 @@
-// Команда импорта и проверки наборов данных (clients.csv + sales.csv) и закрытого релиза v4.
+// Команда импорта и проверки наборов данных (clients.csv + sales.csv v4/v5) и закрытого релиза v4.
 //
 //	go run ./cmd/import -clients testdata/smoke/clients.csv -sales testdata/smoke/sales.csv -version demo -dry-run
 //	go run ./cmd/import -verify-v4
@@ -35,7 +35,7 @@ func (w *dryRunWriter) WriteDataset(ctx context.Context, version string, batches
 
 func main() {
 	clientsPath := flag.String("clients", "", "путь к clients.csv")
-	salesPath := flag.String("sales", "", "путь к sales.csv")
+	salesPath := flag.String("sales", "", "путь к sales.csv (6 колонок v4 или 7 колонок v5 с product_group)")
 	version := flag.String("version", "demo-v1", "версия набора данных для DatasetWriter")
 	batchSize := flag.Int("batch-size", data.DefaultBatchSize, "размер партии для contract.DatasetWriter")
 	checkAnon := flag.Bool("check-anonymization", false, "проверить пороги обезличивания (>=3 покупателей, >=5 физлиц для B2C)")
@@ -93,7 +93,7 @@ func run(ctx context.Context, logger *slog.Logger, opts options) error {
 	}
 
 	if !opts.dryRun {
-		return errors.New("SQL-адаптер contract.DatasetWriter принадлежит зоне 4 (internal/store/postgres); используйте -dry-run для проверки CSV или см. tests/e2e/data/HANDOFF.md")
+		return errors.New("SQL-адаптер contract.DatasetWriter принадлежит зоне 4 (internal/store/postgres); используйте -dry-run для проверки CSV или см. tests/e2e/data/README.md")
 	}
 
 	cf, err := os.Open(opts.clientsPath)
@@ -119,10 +119,13 @@ func run(ctx context.Context, logger *slog.Logger, opts options) error {
 		"sales", summary.Sales,
 		"batches", summary.Batches,
 		"items", summary.DistinctItems,
+		"product_groups", summary.DistinctProductGroups,
+		"has_product_group_col", summary.HasProductGroupColumn,
 		"empty_sku_rows", summary.EmptySKURows,
 	)
-	fmt.Printf("import dry-run ok: version=%s clients=%d sales=%d batches=%d items=%d empty_sku=%d\n",
-		summary.Version, summary.Clients, summary.Sales, summary.Batches, summary.DistinctItems, summary.EmptySKURows)
+	fmt.Printf("import dry-run ok: version=%s clients=%d sales=%d batches=%d items=%d product_groups=%d has_product_group=%t empty_sku=%d\n",
+		summary.Version, summary.Clients, summary.Sales, summary.Batches, summary.DistinctItems,
+		summary.DistinctProductGroups, summary.HasProductGroupColumn, summary.EmptySKURows)
 	return nil
 }
 

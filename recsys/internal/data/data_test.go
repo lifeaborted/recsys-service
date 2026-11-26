@@ -105,6 +105,53 @@ func TestImportCSVPreservesOrderEmptySKUAndNoOffer(t *testing.T) {
 	}
 }
 
+func TestImportCSVV5ProductGroupColumn(t *testing.T) {
+	clientsCSV := "client_id,client_group,client_type,industry,segment,lk_access\n" +
+		"C1,B2B,ЮЛ,IT,mid,да\n" +
+		"C2,B2C,ФЛ,,,нет\n"
+	salesCSV := "order_id,client_id,order_week,item_id,sku,item_name,product_group\n" +
+		"O1,C1,2026-08-31,SKU-1,SKU-1,Product Base,G100\n" +
+		"O2,C1,2026-09-07,SKU-2,SKU-2,Product Renew,G100\n" +
+		"O3,C2,2026-09-07,N-abc,,Product NoGroup,\n"
+
+	writer := &memoryDatasetWriter{}
+	summary, err := ImportCSV(
+		context.Background(),
+		"v5",
+		strings.NewReader(clientsCSV),
+		strings.NewReader(salesCSV),
+		writer,
+		10,
+	)
+	if err != nil {
+		t.Fatalf("ImportCSV v5 failed: %v", err)
+	}
+	if !summary.HasProductGroupColumn || summary.DistinctItems != 3 || summary.DistinctProductGroups != 2 {
+		t.Fatalf("unexpected v5 summary: %+v", summary)
+	}
+
+	ds, err := ReadCSV(context.Background(), strings.NewReader(clientsCSV), strings.NewReader(salesCSV))
+	if err != nil {
+		t.Fatalf("ReadCSV v5 failed: %v", err)
+	}
+	if ds.ProductGroups["SKU-1"] != "G100" || ds.ProductGroups["SKU-2"] != "G100" || ds.ProductGroups["N-abc"] != "N-abc" {
+		t.Fatalf("unexpected product_group mapping: %+v", ds.ProductGroups)
+	}
+
+	conflictSales := "order_id,client_id,order_week,item_id,sku,item_name,product_group\n" +
+		"O1,C1,2026-08-31,SKU-1,SKU-1,Product Base,G100\n" +
+		"O2,C2,2026-09-07,SKU-1,SKU-1,Product Base,G200\n"
+	if _, err := ReadCSV(context.Background(), strings.NewReader(clientsCSV), strings.NewReader(conflictSales)); err == nil {
+		t.Fatalf("expected error for conflicting product_group on same item_id")
+	}
+
+	badHeaderSales := "order_id,client_id,order_week,item_id,sku,item_name,family\n" +
+		"O1,C1,2026-08-31,SKU-1,SKU-1,Product Base,G100\n"
+	if _, err := ReadCSV(context.Background(), strings.NewReader(clientsCSV), strings.NewReader(badHeaderSales)); err == nil {
+		t.Fatalf("expected error for unexpected 7th column header")
+	}
+}
+
 func TestImportCSVValidationAndFailClosed(t *testing.T) {
 	validClients := "client_id,client_group,client_type,industry,segment,lk_access\nC1,B2B,ЮЛ,,,да\n"
 	validSales := "order_id,client_id,order_week,item_id,sku,item_name\nO1,C1,2026-08-31,I1,,Item\n"

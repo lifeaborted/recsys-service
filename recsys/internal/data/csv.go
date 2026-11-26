@@ -19,36 +19,46 @@ const (
 	// DefaultBatchSize limits the number of clients or sales records per DatasetBatch.
 	DefaultBatchSize = 1000
 
-	// ExpectedV4Version and reference counts come from Датасет_Рекомендации_ЛК_v4.xlsx and baseline.py.
+	// Reference metadata for closed dataset releases v4 (current DB dump) and v5 (latest workbook).
 	ExpectedV4Version        = "v4"
 	ExpectedV4WorkbookSHA256 = "7e219b81f22c51a6a3060e22d7e74657034b8b1d752c3ffaa2c6fa189bb666f4"
-	ExpectedV4Clients        = 19008
-	ExpectedV4Sales          = 31753
-	ExpectedV4Items          = 817
-	ExpectedV4Baskets        = 27603
-	ExpectedV4TrainItems     = 813
-	ExpectedV4ColdItems      = 4
+
+	ExpectedV5Version        = "v5"
+	ExpectedV5WorkbookSHA256 = "56e3c100cd600f1e0d8daf02989b3a0f82a633fa727d30aa49b4d778ef1b0c65"
+	ExpectedV5ProductGroups  = 419
+
+	ExpectedV4Clients    = 19008
+	ExpectedV4Sales      = 31753
+	ExpectedV4Items      = 817
+	ExpectedV4Baskets    = 27603
+	ExpectedV4TrainItems = 813
+	ExpectedV4ColdItems  = 4
 )
 
 var (
 	expectedClientsHeader = []string{"client_id", "client_group", "client_type", "industry", "segment", "lk_access"}
-	expectedSalesHeader   = []string{"order_id", "client_id", "order_week", "item_id", "sku", "item_name"}
+	expectedSalesHeaderV4 = []string{"order_id", "client_id", "order_week", "item_id", "sku", "item_name"}
+	expectedSalesHeaderV5 = []string{"order_id", "client_id", "order_week", "item_id", "sku", "item_name", "product_group"}
 )
 
-// Dataset holds normalized clients and sales records in exact source order.
+// Dataset holds normalized clients, sales records in exact source order, and item->product_group mapping.
 type Dataset struct {
-	Clients []domain.Client
-	Sales   []domain.Sale
+	Clients       []domain.Client
+	Sales         []domain.Sale
+	ProductGroups map[domain.ItemID]string
+	HasGroupCol   bool
 }
 
 // ImportSummary summarizes a validated and published dataset import.
 type ImportSummary struct {
-	Version       string
-	Clients       int
-	Sales         int
-	Batches       int
-	DistinctItems int
-	EmptySKURows  int
+	Version               string
+	Clients               int
+	Sales                 int
+	Batches               int
+	DistinctItems         int
+	DistinctProductGroups int
+	EmptySKURows          int
+	HasProductGroupColumn bool
 }
 
 // LoadCSV reads and validates clients.csv and sales.csv from disk.
@@ -75,7 +85,8 @@ func LoadCSV(ctx context.Context, clientsPath, salesPath string) (Dataset, error
 	return ReadCSV(ctx, cf, sf)
 }
 
-// ReadCSV parses and validates clients.csv and sales.csv streams while preserving source order.
+// ReadCSV parses and validates clients.csv and sales.csv (v4 6-col or v5 7-col with product_group)
+// while preserving source order.
 func ReadCSV(ctx context.Context, clientsR, salesR io.Reader) (Dataset, error) {
 	if ctx == nil {
 		ctx = context.Background()
@@ -91,11 +102,16 @@ func ReadCSV(ctx context.Context, clientsR, salesR io.Reader) (Dataset, error) {
 	if err != nil {
 		return Dataset{}, err
 	}
-	sales, err := readSalesCSV(ctx, salesR, clientSet)
+	sales, productGroups, hasGroupCol, err := readSalesCSV(ctx, salesR, clientSet)
 	if err != nil {
 		return Dataset{}, err
 	}
-	return Dataset{Clients: clients, Sales: sales}, nil
+	return Dataset{
+		Clients:       clients,
+		Sales:         sales,
+		ProductGroups: productGroups,
+		HasGroupCol:   hasGroupCol,
+	}, nil
 }
 
 // ImportCSV validates CSV streams and publishes ordered batches to writer.
@@ -128,20 +144,28 @@ func ImportCSV(
 	}
 
 	items := make(map[domain.ItemID]struct{})
+	pgroups := make(map[string]struct{})
 	emptySKU := 0
 	for _, s := range ds.Sales {
 		items[s.ItemID] = struct{}{}
+		pg := ds.ProductGroups[s.ItemID]
+		if pg == "" {
+			pg = string(s.ItemID)
+		}
+		pgroups[pg] = struct{}{}
 		if s.SKU == nil {
 			emptySKU++
 		}
 	}
 	return ImportSummary{
-		Version:       version,
-		Clients:       len(ds.Clients),
-		Sales:         len(ds.Sales),
-		Batches:       len(batches),
-		DistinctItems: len(items),
-		EmptySKURows:  emptySKU,
+		Version:               version,
+		Clients:               len(ds.Clients),
+		Sales:                 len(ds.Sales),
+		Batches:               len(batches),
+		DistinctItems:         len(items),
+		DistinctProductGroups: len(pgroups),
+		EmptySKURows:          emptySKU,
+		HasProductGroupColumn: ds.HasGroupCol,
 	}, nil
 }
 
@@ -168,15 +192,30 @@ func BuildBatches(ds Dataset, batchSize int) []contract.DatasetBatch {
 
 // VerifyV4Release validates that version, SHA-256, and dataset sizes match the closed v4 release.
 func VerifyV4Release(version, workbookSHA256 string, salesCount, itemCount int) error {
-	if strings.TrimSpace(version) != ExpectedV4Version {
-		return fmt.Errorf("unexpected dataset version %q, want %q", version, ExpectedV4Version)
+	return verifyRelease(ExpectedV4Version, ExpectedV4WorkbookSHA256, version, workbookSHA256, salesCount, itemCount)
+}
+
+// VerifyV5Release validates that version, SHA-256, and dataset sizes match the closed v5 release.
+func VerifyV5Release(version, workbookSHA256 string, salesCount, itemCount, productGroupCount int) error {
+	if err := verifyRelease(ExpectedV5Version, ExpectedV5WorkbookSHA256, version, workbookSHA256, salesCount, itemCount); err != nil {
+		return err
 	}
-	if !strings.EqualFold(strings.TrimSpace(workbookSHA256), ExpectedV4WorkbookSHA256) {
-		return fmt.Errorf("unexpected v4 workbook sha256 %q, want %q", workbookSHA256, ExpectedV4WorkbookSHA256)
+	if productGroupCount != ExpectedV5ProductGroups {
+		return fmt.Errorf("unexpected v5 product_group count %d, want %d", productGroupCount, ExpectedV5ProductGroups)
+	}
+	return nil
+}
+
+func verifyRelease(wantVer, wantSHA, version, workbookSHA256 string, salesCount, itemCount int) error {
+	if strings.TrimSpace(version) != wantVer {
+		return fmt.Errorf("unexpected dataset version %q, want %q", version, wantVer)
+	}
+	if !strings.EqualFold(strings.TrimSpace(workbookSHA256), wantSHA) {
+		return fmt.Errorf("unexpected %s workbook sha256 %q, want %q", wantVer, workbookSHA256, wantSHA)
 	}
 	if salesCount != ExpectedV4Sales || itemCount != ExpectedV4Items {
-		return fmt.Errorf("unexpected v4 sizes: %d sales, %d items (want %d sales, %d items)",
-			salesCount, itemCount, ExpectedV4Sales, ExpectedV4Items)
+		return fmt.Errorf("unexpected %s sizes: %d sales, %d items (want %d sales, %d items)",
+			wantVer, salesCount, itemCount, ExpectedV4Sales, ExpectedV4Items)
 	}
 	return nil
 }
@@ -239,55 +278,87 @@ func readClientsCSV(ctx context.Context, r io.Reader) ([]domain.Client, map[doma
 	return clients, seen, nil
 }
 
-func readSalesCSV(ctx context.Context, r io.Reader, knownClients map[domain.ClientID]struct{}) ([]domain.Sale, error) {
+func readSalesCSV(
+	ctx context.Context,
+	r io.Reader,
+	knownClients map[domain.ClientID]struct{},
+) ([]domain.Sale, map[domain.ItemID]string, bool, error) {
 	reader := newCSVReader(r)
 	header, err := reader.Read()
 	if err != nil {
-		return nil, fmt.Errorf("read sales header: %w", err)
+		return nil, nil, false, fmt.Errorf("read sales header: %w", err)
 	}
 	stripBOM(header)
-	if err := validateHeader("sales.csv", header, expectedSalesHeader); err != nil {
-		return nil, err
+
+	hasGroupCol := false
+	wantCols := len(expectedSalesHeaderV4)
+	switch len(header) {
+	case len(expectedSalesHeaderV4):
+		if err := validateHeader("sales.csv", header, expectedSalesHeaderV4); err != nil {
+			return nil, nil, false, err
+		}
+	case len(expectedSalesHeaderV5):
+		if err := validateHeader("sales.csv", header, expectedSalesHeaderV5); err != nil {
+			return nil, nil, false, err
+		}
+		hasGroupCol = true
+		wantCols = len(expectedSalesHeaderV5)
+	default:
+		return nil, nil, false, fmt.Errorf("sales.csv: header has %d columns %v, want %v (v4) or %v (v5)",
+			len(header), header, expectedSalesHeaderV4, expectedSalesHeaderV5)
 	}
 
 	var sales []domain.Sale
+	productGroups := make(map[domain.ItemID]string)
 	for line := 2; ; line++ {
 		if err := ctx.Err(); err != nil {
-			return nil, fmt.Errorf("read sales.csv line %d: %w", line, err)
+			return nil, nil, false, fmt.Errorf("read sales.csv line %d: %w", line, err)
 		}
 		record, err := reader.Read()
 		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
-			return nil, fmt.Errorf("read sales.csv line %d: %w", line, err)
+			return nil, nil, false, fmt.Errorf("read sales.csv line %d: %w", line, err)
 		}
-		if len(record) != len(expectedSalesHeader) {
-			return nil, fmt.Errorf("sales.csv line %d: got %d columns, want %d", line, len(record), len(expectedSalesHeader))
+		if len(record) != wantCols {
+			return nil, nil, false, fmt.Errorf("sales.csv line %d: got %d columns, want %d", line, len(record), wantCols)
 		}
 
 		orderID := strings.TrimSpace(record[0])
 		if orderID == "" {
-			return nil, fmt.Errorf("sales.csv line %d: empty order_id", line)
+			return nil, nil, false, fmt.Errorf("sales.csv line %d: empty order_id", line)
 		}
 		clientID := domain.ClientID(strings.TrimSpace(record[1]))
 		if clientID == "" {
-			return nil, fmt.Errorf("sales.csv line %d: empty client_id", line)
+			return nil, nil, false, fmt.Errorf("sales.csv line %d: empty client_id", line)
 		}
 		if _, ok := knownClients[clientID]; !ok {
-			return nil, fmt.Errorf("sales.csv line %d: unknown client_id %q", line, clientID)
+			return nil, nil, false, fmt.Errorf("sales.csv line %d: unknown client_id %q", line, clientID)
 		}
 
 		weekStr := strings.TrimSpace(record[2])
 		orderWeek, err := time.Parse("2006-01-02", weekStr)
 		if err != nil {
-			return nil, fmt.Errorf("sales.csv line %d: invalid order_week %q: %w", line, weekStr, err)
+			return nil, nil, false, fmt.Errorf("sales.csv line %d: invalid order_week %q: %w", line, weekStr, err)
 		}
 
 		itemID := domain.ItemID(strings.TrimSpace(record[3]))
 		if itemID == "" {
-			return nil, fmt.Errorf("sales.csv line %d: empty item_id", line)
+			return nil, nil, false, fmt.Errorf("sales.csv line %d: empty item_id", line)
 		}
+
+		pg := string(itemID)
+		if hasGroupCol {
+			if rawPG := strings.TrimSpace(record[6]); rawPG != "" {
+				pg = rawPG
+			}
+		}
+		if prevPG, exists := productGroups[itemID]; exists && prevPG != pg {
+			return nil, nil, false, fmt.Errorf("sales.csv line %d: conflicting product_group %q for item_id %q (previous %q)",
+				line, pg, itemID, prevPG)
+		}
+		productGroups[itemID] = pg
 
 		sales = append(sales, domain.Sale{
 			SourceRow: line,
@@ -299,7 +370,7 @@ func readSalesCSV(ctx context.Context, r io.Reader, knownClients map[domain.Clie
 			ItemName:  strings.TrimSpace(record[5]),
 		})
 	}
-	return sales, nil
+	return sales, productGroups, hasGroupCol, nil
 }
 
 func newCSVReader(r io.Reader) *csv.Reader {

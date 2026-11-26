@@ -15,3 +15,4 @@ recommendations.sql
 !testdata/**
 !internal/**/testdata/**
 !tests/**/testdata/**
+/tests/e2e/data/HANDOFF.md

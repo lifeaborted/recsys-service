@@ -330,6 +330,27 @@ func TestDataModule(t *testing.T) {
 			t.Fatalf("expected feed timestamp and leakage warnings")
 		}
 
+		// When canonical v5 ProductGroups are supplied, they take precedence over card.FamilyID / nil.
+		pgReport, err := bt.Run(context.Background(), rec, BacktestConfig{
+			DatasetLabel: "v5-test",
+			SnapshotID:   "snap-1",
+			AllowedItems: allowed,
+			ProductGroups: map[domain.ItemID]string{
+				"hist-base":   "G-A",
+				"hist-renew":  "G-A",
+				"hist-b2c":    "G-X",
+				"hist-cold":   "G-B",
+				"hist-newfam": "G-C",
+			},
+		})
+		if err != nil {
+			t.Fatalf("EvaluateRecommender with v5 ProductGroups failed: %v", err)
+		}
+		pgFam := pgReport.Results[0].Families
+		if pgFam.TotalHits != 3 || pgFam.KnownFamilyHits != 1 || pgFam.NewFamilyHits != 2 || pgFam.UnknownFamilyHits != 0 {
+			t.Fatalf("expected 1 known-family variant and 2 new-product hits via canonical ProductGroups, got %+v", pgFam)
+		}
+
 		// Recommender errors must propagate.
 		rec.err = errors.New("snapshot missing")
 		if _, err := bt.Run(context.Background(), rec, BacktestConfig{SnapshotID: "snap-1"}); err == nil {
@@ -364,5 +385,32 @@ func TestDataModule(t *testing.T) {
 		if summary.Rows != 1 || summary.Baskets != 1 || summary.TrainItems != 1 || summary.CohortAClients != 0 {
 			t.Fatalf("unexpected smoke summary: %+v", summary)
 		}
+	})
+
+	t.Run("V5ProductGroupHitSplit", func(t *testing.T) {
+		// Peer p1 links base_v1 with base_v2 (same product_group G100) and new_prod (G200).
+		// Target c1 buys base_v1 in train, then buys base_v2 (variant hit) and new_prod (new product hit) in test.
+		sales := []Sale{
+			{OrderID: "op1", ClientID: "p1", Week: "2026-08-24", ItemID: "base_v1", Group: "B2B"},
+			{OrderID: "op1", ClientID: "p1", Week: "2026-08-24", ItemID: "base_v2", Group: "B2B"},
+			{OrderID: "op1", ClientID: "p1", Week: "2026-08-24", ItemID: "new_prod", Group: "B2B"},
+			{OrderID: "oc1", ClientID: "c1", Week: "2026-08-31", ItemID: "base_v1", Group: "B2B"},
+			{OrderID: "oc2", ClientID: "c1", Week: "2026-09-07", ItemID: "base_v2", Group: "B2B"},
+			{OrderID: "oc2", ClientID: "c1", Week: "2026-09-07", ItemID: "new_prod", Group: "B2B"},
+		}
+		pgroups := map[string]string{
+			"base_v1":  "G100",
+			"base_v2":  "G100",
+			"new_prod": "G200",
+		}
+		summary := SummarizeDatasetWithGroups(sales, pgroups)
+		if summary.TotalItems != 3 || summary.ProductGroups != 2 {
+			t.Fatalf("expected 3 items and 2 product_groups, got %+v", summary)
+		}
+		res := BaselinesWithGroups(sales, pgroups)[0]
+		if res.CoPurchase.Hits != 2 || res.CoPurchase.VariantHits != 1 || res.CoPurchase.NewProductHits != 1 {
+			t.Fatalf("expected 2 hits (1 variant, 1 new), got %+v", res.CoPurchase)
+		}
+		assertNear(t, res.CoPurchase.VariantShare, 50.0, "variant share %")
 	})
 }
