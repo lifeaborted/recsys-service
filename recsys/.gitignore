@@ -1,0 +1,11 @@
+.env
+.env.*
+!.env.example
+/bin/
+/input/
+/private/
+*.exe
+*.dump
+*.xlsx
+*.yml.gz
+recommendations.sql

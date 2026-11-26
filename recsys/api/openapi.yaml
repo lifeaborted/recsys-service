@@ -1,0 +1,236 @@
+openapi: 3.0.3
+info:
+  title: Softline Recommendations API
+  version: 0.1.0
+  description: Draft contract. Only the readiness route is implemented in the scaffold.
+servers:
+  - url: /api/v1
+security:
+  - bearerAuth: []
+paths:
+  /health:
+    get:
+      operationId: getHealth
+      security: []
+      responses:
+        '200':
+          description: Database and schema are ready
+        '503':
+          description: Database or schema is unavailable
+  /auth/register:
+    post:
+      operationId: register
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [login, password, client_group]
+              properties:
+                login: {type: string}
+                password: {type: string, format: password}
+                client_group: {$ref: '#/components/schemas/ClientGroup'}
+                industry: {type: string}
+      responses:
+        '201':
+          description: Demo account created
+        '400':
+          description: Invalid registration data
+        '409':
+          description: Login already exists
+  /auth/login:
+    post:
+      operationId: login
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [login, password]
+              properties:
+                login: {type: string}
+                password: {type: string, format: password}
+      responses:
+        '200':
+          description: Demo session created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [access_token, expires_at]
+                properties:
+                  access_token: {type: string}
+                  expires_at: {type: string, format: date-time}
+        '401':
+          description: Invalid credentials
+  /users/me:
+    get:
+      operationId: getCurrentUser
+      responses:
+        '200':
+          description: Current profile
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [profile_id, client_group]
+                properties:
+                  profile_id: {type: string}
+                  client_group: {$ref: '#/components/schemas/ClientGroup'}
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /products:
+    get:
+      operationId: listProducts
+      parameters:
+        - in: query
+          name: limit
+          schema: {type: integer, minimum: 1, maximum: 100}
+      responses:
+        '200':
+          description: Page of catalog products
+        '400':
+          description: Invalid limit
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /purchases:
+    post:
+      operationId: createPurchase
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [item_id]
+              properties:
+                item_id: {type: string}
+      responses:
+        '201':
+          description: Demo purchase recorded for the current profile
+        '400':
+          description: Invalid input
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Unknown item
+  /recommendations/me:
+    get:
+      operationId: getCurrentRecommendations
+      responses:
+        '200':
+          description: Recommendations for the session profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Recommendations'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  responses:
+    Unauthorized:
+      description: Missing or invalid session
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+  schemas:
+    ClientGroup:
+      type: string
+      enum: [B2B, B2C]
+    Error:
+      type: object
+      required: [request_id, error]
+      properties:
+        request_id: {type: string}
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: {type: string}
+            message: {type: string}
+    Recommendations:
+      type: object
+      required: [request_id, snapshot_id, partial_reason, items, graph]
+      properties:
+        request_id: {type: string}
+        snapshot_id: {type: string}
+        partial_reason: {type: string, nullable: true}
+        items:
+          type: array
+          maxItems: 3
+          items: {$ref: '#/components/schemas/Recommendation'}
+        graph:
+          $ref: '#/components/schemas/Graph'
+    Recommendation:
+      type: object
+      required: [item_id, sku, recommendation_kind, family_id, title, explanation, variants, evidence_ids]
+      properties:
+        item_id: {type: string}
+        offer_id: {type: string}
+        sku: {type: string, nullable: true}
+        recommendation_kind:
+          type: string
+          enum: [renewal, upgrade, complement, behavioral, popular]
+        family_id: {type: string, nullable: true}
+        title: {type: string}
+        url: {type: string, format: uri}
+        explanation: {type: string}
+        variants:
+          type: array
+          items: {$ref: '#/components/schemas/Variant'}
+        evidence_ids:
+          type: array
+          items: {type: string}
+    Variant:
+      type: object
+      required: [item_id, differences]
+      properties:
+        item_id: {type: string}
+        url: {type: string, format: uri}
+        differences:
+          type: array
+          items:
+            type: object
+            required: [field, value, unit, source]
+            properties:
+              field: {type: string}
+              value: {}
+              unit: {type: string}
+              source: {type: string}
+    Graph:
+      type: object
+      required: [nodes, edges]
+      properties:
+        nodes:
+          type: array
+          items:
+            type: object
+            required: [id, type, label]
+            properties:
+              id: {type: string}
+              type: {type: string}
+              label: {type: string}
+        edges:
+          type: array
+          items:
+            type: object
+            required: [id, from, to, type, weight, reason, source, snapshot_id]
+            properties:
+              id: {type: string}
+              from: {type: string}
+              to: {type: string}
+              type: {type: string}
+              weight: {type: number}
+              reason: {type: string}
+              source: {type: string}
+              snapshot_id: {type: string}

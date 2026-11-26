@@ -1,0 +1,44 @@
+{
+  "request_id": "demo-1",
+  "snapshot_id": "demo-v1",
+  "partial_reason": "insufficient_eligible_products",
+  "items": [
+    {
+      "item_id": "DEMO-RENEW-12",
+      "sku": null,
+      "recommendation_kind": "renewal",
+      "family_id": "DEMO-SUITE",
+      "title": "Продление на 12 месяцев",
+      "explanation": "Для купленной редакции доступно продление на 12 или 24 месяца.",
+      "variants": [
+        {
+          "item_id": "DEMO-RENEW-12",
+          "differences": [{"field": "term", "value": 12, "unit": "month", "source": "synthetic-offer-12"}]
+        },
+        {
+          "item_id": "DEMO-RENEW-24",
+          "differences": [{"field": "term", "value": 24, "unit": "month", "source": "synthetic-offer-24"}]
+        }
+      ],
+      "evidence_ids": ["demo-renewal"]
+    }
+  ],
+  "graph": {
+    "nodes": [
+      {"id": "item:DEMO-BASE", "type": "product", "label": "Купленная редакция"},
+      {"id": "item:DEMO-RENEW-12", "type": "product", "label": "Продление на 12 месяцев"}
+    ],
+    "edges": [
+      {
+        "id": "demo-renewal",
+        "from": "item:DEMO-BASE",
+        "to": "item:DEMO-RENEW-12",
+        "type": "renewal",
+        "weight": 1,
+        "reason": "Совместимая редакция в синтетическом наборе.",
+        "source": "synthetic-rule-1",
+        "snapshot_id": "demo-v1"
+      }
+    ]
+  }
+}

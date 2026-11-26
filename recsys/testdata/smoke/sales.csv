@@ -1,0 +1,2 @@
+order_id,client_id,order_week,item_id,sku,item_name
+DEMO-ORDER-1,DEMO-BUYER,2026-08-31,DEMO-BASE,DEMO-BASE,Учебная лицензия
