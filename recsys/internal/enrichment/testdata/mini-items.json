@@ -1,0 +1,8 @@
+[
+  {"item_id":"DEMO-BASE","sku":"DEMO-BASE-001","name":"Demo Suite Base"},
+  {"item_id":"DEMO-RENEW-12","sku":" demo-r12-001 ","name":"Demo Suite Renewal 12"},
+  {"item_id":"DEMO-RENEW-24","sku":"DEMO-R24-002","name":"Demo Suite Renewal 24"},
+  {"item_id":"DEMO-AMBIGUOUS","sku":"DEMO-DUP","name":"Demo Ambiguous A"},
+  {"item_id":"DEMO-NAME-ONLY","name":"Demo Suite Base"},
+  {"item_id":"DEMO-WRONG-SKU","sku":"OTHER","name":"Demo Suite Base"}
+]

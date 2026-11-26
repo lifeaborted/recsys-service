@@ -1,0 +1,29 @@
+{
+  "documents": [{
+    "source": {
+      "url": "https://example.com/demo-suite/renewal-rules",
+      "version": "demo-rules-v1",
+      "observed_at": "2026-11-26T10:30:00+05:00"
+    },
+    "text": "Базовую лицензию Demo Suite на 10–14 узлов можно продлить на 12 месяцев.",
+    "statements": [
+      {
+        "id": "demo-renewal", "from": "DEMO-BASE", "to": "DEMO-RENEW-12", "kind": "renewal",
+        "source": {"quote": "Базовую лицензию Demo Suite на 10–14 узлов можно продлить на 12 месяцев."},
+        "constraints": [
+          {"endpoint":"from","field":"seats","value":"10–14"},
+          {"endpoint":"to","field":"seats","value":"10–14"},
+          {"endpoint":"to","field":"term","value":"12","unit":"month"}
+        ]
+      },
+      {
+        "id": "demo-unverified", "from": "DEMO-BASE", "to": "DEMO-RENEW-24", "kind": "renewal",
+        "source": {"quote": "Подтверждено продление на 24 месяца."}
+      }
+    ]
+  }],
+  "rules": [
+    {"id":"demo-renewal","from":"DEMO-BASE","to":"DEMO-RENEW-12","kind":"renewal","quote":"Базовую лицензию Demo Suite на 10–14 узлов можно продлить на 12 месяцев."},
+    {"id":"demo-unverified","from":"DEMO-BASE","to":"DEMO-RENEW-24","kind":"renewal","quote":"Подтверждено продление на 24 месяца."}
+  ]
+}
