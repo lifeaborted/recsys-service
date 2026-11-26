@@ -1,0 +1,29 @@
+# Environment and credentials
+.env
+.env.*
+!recsys/.env.example
+!frontend-softline/.env.example
+
+# Private datasets, dumps, and exports (public repo must contain only synthetics)
+*.xlsx
+*.xls
+*.dump
+*.sql.gz
+*.yml.gz
+recommendations.sql
+/private/
+/input/
+recsys/private/
+recsys/input/
+*.csv
+!recsys/testdata/**
+!recsys/internal/**/testdata/**
+!recsys/tests/**/testdata/**
+
+# Build artifacts
+/bin/
+recsys/bin/
+*.exe
+
+# Local-only handoff notes (kept out of git repository)
+recsys/tests/e2e/data/HANDOFF.md

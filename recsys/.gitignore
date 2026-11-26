@@ -6,6 +6,13 @@
 /private/
 *.exe
 *.dump
+*.sql.gz
 *.xlsx
+*.xls
 *.yml.gz
 recommendations.sql
+*.csv
+!testdata/**
+!internal/**/testdata/**
+!tests/**/testdata/**
+/tests/e2e/data/HANDOFF.md
