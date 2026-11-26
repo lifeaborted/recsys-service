@@ -1,14 +1,15 @@
 -- Минимальные демо-данные, чтобы REST API отдавал карточки даже без импорта
 -- полного дампа (260 тыс. строк). Идемпотентно: можно выполнять повторно.
--- Для реальной проверки алгоритма залейте recommendations.sql через import.ps1.
+-- Для оценки v4 восстановите полный дамп в отдельную базу.
 
 INSERT INTO recommendations.catalog_currencies (currency_code, rate)
 VALUES ('RUB', 1)
 ON CONFLICT (currency_code) DO NOTHING;
 
 INSERT INTO recommendations.clients (excel_row, client_id, client_group, client_type, industry, segment, lk_access)
-VALUES (900001, 'C02417', 'B2B', 'Юрлицо', 'IT', 'enterprise', 'да')
-ON CONFLICT (excel_row) DO NOTHING;
+VALUES (900003, 'DEMO-B2B', 'B2B', 'Юрлицо', 'IT', 'enterprise', 'да'),
+       (900002, 'DEMO-B2C', 'B2C', 'ФЛ', NULL, NULL, 'да')
+ON CONFLICT (client_id) DO NOTHING;
 
 INSERT INTO recommendations.catalog_snapshots (id, source_url, feed_generated_at)
 OVERRIDING SYSTEM VALUE

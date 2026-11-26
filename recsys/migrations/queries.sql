@@ -15,10 +15,11 @@ ORDER BY order_week DESC, excel_row
 LIMIT 50;
 
 -- 3) Самые частые покупки по всем клиентам — база для popularity-стратегии
-SELECT item_name, COUNT(*) AS buys
+SELECT item_id, COUNT(DISTINCT client_id) AS buyers
 FROM recommendations.sales
-GROUP BY item_name
-ORDER BY buys DESC
+WHERE order_week <= DATE '2026-08-31'
+GROUP BY item_id
+ORDER BY buyers DESC, item_id COLLATE "C"
 LIMIT 20;
 
 -- 4) Кандидаты: товары из корзин таких же клиентов (простой signal)

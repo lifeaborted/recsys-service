@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -56,7 +57,9 @@ func (m *Migrator) Init(ctx context.Context) error {
 	return nil
 }
 
-// Files возвращает миграции в порядке имени файла.
+var migrationName = regexp.MustCompile(`^[0-9]+_.+\.sql$`)
+
+// Files возвращает нумерованные миграции в порядке имени файла.
 func (m *Migrator) Files() ([]Migration, error) {
 	entries, err := os.ReadDir(m.dir)
 	if err != nil {
@@ -66,7 +69,7 @@ func (m *Migrator) Files() ([]Migration, error) {
 	files := make([]Migration, 0, len(entries))
 	for _, entry := range entries {
 		name := entry.Name()
-		if entry.IsDir() || !strings.HasSuffix(name, ".sql") || strings.HasSuffix(name, ".down.sql") {
+		if entry.IsDir() || !migrationName.MatchString(name) || strings.HasSuffix(name, ".down.sql") {
 			continue
 		}
 		files = append(files, Migration{Name: name, Path: filepath.Join(m.dir, name)})

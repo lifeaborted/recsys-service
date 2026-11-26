@@ -130,8 +130,8 @@ export async function login(
 export async function me(cfg: RecsysClientConfig): Promise<MeResponse> {
   if (cfg.transport === "mock") {
     return cfg.token === "demo-token-u2"
-      ? { profile_id: "u2", client_id: "C02417", client_group: "B2C", login: "demo-b2c" }
-      : { profile_id: "u1", client_id: "C02417", client_group: "B2B", login: "demo-b2b" };
+      ? { profile_id: "u2", client_id: "DEMO-B2C", client_group: "B2C", login: "demo-b2c" }
+      : { profile_id: "u1", client_id: "DEMO-B2B", client_group: "B2B", login: "demo-b2b" };
   }
   return request<MeResponse>(cfg, "/users/me");
 }

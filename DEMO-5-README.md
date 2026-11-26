@@ -12,8 +12,7 @@ E:\github-project\recsys-service\
 └── DEMO-5-README.md     этот файл
 ```
 
-Полный дамп БД лежит отдельно: `E:\recommendations.sql` (PostgreSQL 17, ~276 МБ,
-260 тыс. строк). Временная папка `bd-for-test` удалена — все утилиты перенесены в `recsys`.
+Демо использует отдельную синтетическую БД. Закрытую оценку v4 запускайте по [инструкции backend](recsys/README.md).
 
 ## 2. Требования
 
@@ -22,35 +21,13 @@ E:\github-project\recsys-service\
 - PostgreSQL 17 с пользователем, который может создавать БД (`CREATEDB`)
 - npm-зависимости фронтенда уже установлены в `frontend-softline/node_modules`
 
-## 3. База данных (один раз)
+## 3. База данных
 
-Все команды выполняются из каталога `recsys`:
+Из каталога `recsys` задайте `RECSYS_DATABASE_URL` для отдельной демо-БД и выполните:
 
 ```powershell
-cd E:\github-project\recsys-service\recsys
-
-# Создать БД recsys (если её нет) и применить схему recommendations
 go run ./cmd/migration up
-
-# Полный дамп с данными (занимает ~20 секунд)
-go run ./cmd/import -file E:\recommendations.sql -truncate
-
-# Проверить состояние
-go run ./cmd/migration status
-```
-
-Если нужны только минимальные демо-данные вместо полного дампа:
-
-```powershell
 go run ./cmd/migration seed
-```
-
-Проверить вручную, что данные загружены, можно запросом:
-
-```sql
-SELECT count(*) FROM recommendations.catalog_offers;  -- 135890
-SELECT count(*) FROM recommendations.sales;           -- 32279
-SELECT count(*) FROM recommendations.clients;         -- 19162
 ```
 
 ## 4. Запуск сервисов
@@ -179,7 +156,7 @@ npm run build
 | `bind: Only one usage...` на порту | уже запущен API; остановите старый процесс или смените `RECSYS_ADDR` |
 | `database "recsys" does not exist` | выполните `go run ./cmd/migration up` — БД создастся автоматически |
 | `relation "recommendations.*" does not exist` | не применена миграция: `go run ./cmd/migration up` |
-| Пустая выдача на `#/recommendations` | не залит дамп: `go run ./cmd/import -file E:\recommendations.sql -truncate` |
+| Пустая выдача на `#/recommendations` | проверьте демо-БД и выполните `go run ./cmd/migration seed` |
 | `401 Unauthorized` на `/me` | нужен заголовок `Authorization: Bearer demo-token-u1` (или `demo-token-u2`) |
 | Карточки не меняются при смене профиля | перезапустите Vite после изменения `vite.config.ts`; проверьте, что API не в mock-режиме |
 

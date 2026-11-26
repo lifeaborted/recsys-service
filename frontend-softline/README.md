@@ -24,15 +24,16 @@ npm run preview    # http://localhost:4173
 По умолчанию фронтенд работает в **live-режиме** и ходит на Go API проекта `recsys`
 (порт 8080 через прокси Vite: `/api` → `/api/v1`). Mock-режим можно включить в **Профиле**.
 
-БД, миграции, импорт и API — в `E:\github-project\recsys-service\recsys`:
+Для демо выберите отдельную синтетическую БД в `RECSYS_DATABASE_URL`. Из корня репозитория выполните:
 
 ```bash
-cd ../recsys
-go run ./cmd/migration up                                # схема (создаст БД при необходимости)
-go run ./cmd/migration seed                              # демо-данные, если дамп ещё не залит
-go run ./cmd/import -file E:\recommendations.sql -truncate # полный дамп, 260 тыс. строк
-go run ./cmd/api                                         # REST API на :8080
+cd recsys
+go run ./cmd/migration up
+go run ./cmd/migration seed
+go run ./cmd/api
 ```
+
+Сценарий закрытой оценки PostgreSQL v4 описан в [README backend](../recsys/README.md).
 
 Подробности — в `recsys/README.md` и `recsys/docs/demo/README.md`. Страница
 **«Тест рекомендаций»** (`#/recommendations`) показывает счётчики БД, выдачу,

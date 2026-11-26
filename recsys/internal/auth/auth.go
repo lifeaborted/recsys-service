@@ -20,14 +20,14 @@ type contextKey struct{}
 var (
 	mu       sync.Mutex
 	profiles = map[string]Profile{
-		"demo-token-u1": {ID: "u1", ClientID: "C02417", Group: "B2B", Login: "demo-b2b"},
-		"demo-token-u2": {ID: "u2", ClientID: "C02417", Group: "B2C", Login: "demo-b2c"},
+		"demo-token-u1": {ID: "u1", ClientID: "DEMO-B2B", Group: "B2B", Login: "demo-b2b"},
+		"demo-token-u2": {ID: "u2", ClientID: "DEMO-B2C", Group: "B2C", Login: "demo-b2c"},
 	}
 )
 
 // Register создаёт демо-профиль. Возвращает false при занятом логине.
 func Register(login, password, group string) (Profile, string, bool) {
-	if login == "" || password == "" {
+	if login == "" || password == "" || (group != "B2B" && group != "B2C") {
 		return Profile{}, "", false
 	}
 	mu.Lock()
@@ -39,7 +39,7 @@ func Register(login, password, group string) (Profile, string, bool) {
 	}
 	profile := Profile{
 		ID:       "reg-" + login,
-		ClientID: "C02417",
+		ClientID: "DEMO-" + group,
 		Group:    group,
 		Login:    login,
 	}

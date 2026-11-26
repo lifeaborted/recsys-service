@@ -88,7 +88,7 @@ func (s *Store) seedBaseline(ctx context.Context, clientID string) error {
 	var runID int64
 	err = tx.QueryRowContext(ctx, `
 		INSERT INTO recommendations.recommendation_runs (client_id, model_version)
-		VALUES ($1, 'go-baseline-1.0')
+		VALUES ($1, 'demo-popularity-v4')
 		RETURNING run_id
 	`, clientID).Scan(&runID)
 	if err != nil {
@@ -97,13 +97,17 @@ func (s *Store) seedBaseline(ctx context.Context, clientID string) error {
 	}
 
 	rows, err := tx.QueryContext(ctx, `
-		SELECT offer_id, COUNT(*)::bigint AS buys
-		FROM recommendations.purchase_history
-		WHERE offer_id IS NOT NULL
-		GROUP BY offer_id
-		ORDER BY buys DESC, offer_id
+		SELECT h.offer_id, COUNT(DISTINCT h.client_id)::bigint AS buyers
+		FROM recommendations.purchase_history h
+		JOIN recommendations.catalog_offers o ON o.offer_id = h.offer_id
+		WHERE o.available AND NOT EXISTS (
+			SELECT 1 FROM recommendations.purchase_history seen
+			WHERE seen.client_id = $1 AND seen.offer_id = h.offer_id
+		)
+		GROUP BY h.offer_id
+		ORDER BY buyers DESC, h.offer_id
 		LIMIT 3
-	`)
+	`, clientID)
 	if err != nil {
 		_ = tx.Rollback()
 		return err
@@ -123,8 +127,12 @@ func (s *Store) seedBaseline(ctx context.Context, clientID string) error {
 	if len(candidates) == 0 {
 		fallback, err := tx.QueryContext(ctx, `
 			SELECT offer_id FROM recommendations.catalog_offers
-			WHERE available ORDER BY offer_id LIMIT 3
-		`)
+			WHERE available AND NOT EXISTS (
+				SELECT 1 FROM recommendations.purchase_history seen
+				WHERE seen.client_id = $1 AND seen.offer_id = catalog_offers.offer_id
+			)
+			ORDER BY offer_id LIMIT 3
+		`, clientID)
 		if err != nil {
 			_ = tx.Rollback()
 			return err
@@ -145,9 +153,9 @@ func (s *Store) seedBaseline(ctx context.Context, clientID string) error {
 		if i >= 3 {
 			break
 		}
-		reason := fmt.Sprintf("Покупали вместе с вашими товарами (%d покупок)", c.buys)
+		reason := fmt.Sprintf("Товар купили %d разных клиентов", c.buys)
 		if c.buys == 0 {
-			reason = "Популярно в каталоге Softline"
+			reason = "Доступно в каталоге"
 		}
 		_, err := tx.ExecContext(ctx, `
 			INSERT INTO recommendations.recommendation_items
@@ -193,7 +201,7 @@ func (s *Store) runItems(ctx context.Context, runID int64, limit int) ([]Item, e
 }
 
 func (s *Store) Recommend(ctx context.Context, clientID string, limit int) (Result, error) {
-	result := Result{ClientID: clientID, ModelVersion: "go-baseline-1.0", GeneratedAt: time.Now().UTC()}
+	result := Result{ClientID: clientID, ModelVersion: "demo-popularity-v4", GeneratedAt: time.Now().UTC()}
 	runID, version, at, err := s.latestRun(ctx, clientID)
 	if err == sql.ErrNoRows {
 		if err := s.seedBaseline(ctx, clientID); err != nil {

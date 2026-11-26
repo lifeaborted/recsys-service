@@ -86,4 +86,4 @@ tests 8, pass 8, fail 0
 изменялись. Владельцу зоны 4 — проверить совместимость с общим `Recommender` и
 OpenAPI перед финальной сборкой. Утилиты `cmd/migration`, `cmd/import`, SQL-миграция,
 seed и `queries.sql` перенесены в `recsys`; временная папка `bd-for-test/` удалена.
-Дамп лежит на `E:\recommendations.sql`, импорт: `go run ./cmd/import -file E:\recommendations.sql -truncate`.
+Закрытый дамп v4 восстанавливается в отдельную чистую БД по [инструкции](../../../README.md).

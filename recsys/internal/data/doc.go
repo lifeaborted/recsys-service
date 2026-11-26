@@ -1,2 +1,2 @@
-// Package data — нормализация и импорт данных v3 через contract.DatasetWriter.
+// Package data — нормализация и импорт данных v4 через contract.DatasetWriter.
 package data
