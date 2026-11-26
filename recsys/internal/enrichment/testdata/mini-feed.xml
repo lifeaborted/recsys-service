@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<yml_catalog date="2026-11-26T10:00:00+05:00">
+  <shop><offers>
+    <offer id="501" available="true"><name>Demo Suite Base</name><vendor>Demo Vendor</vendor><categoryId>software</categoryId><vendorCode>DEMO-BASE-001</vendorCode><url>https://example.com/demo-base-001-501/</url><param name="family">DEMO-SUITE</param><param name="edition">Standard</param><param name="license type">base</param><param name="platform">Windows</param><param name="seats">10–14</param></offer>
+    <offer id="502" available="true"><name>Demo Suite Renewal 12</name><vendor>Demo Vendor</vendor><categoryId>software</categoryId><vendorCode>DEMO-R12-001</vendorCode><url>https://example.com/demo-r12-001-502/</url><param name="family">DEMO-SUITE</param><param name="license type">renewal</param><param name="term" unit="month">12</param><param name="seats">10–14</param></offer>
+    <offer id="503" available="false"><name>Demo Suite Renewal 24</name><vendor>Demo Vendor</vendor><categoryId>software</categoryId><url>https://example.com/demo-r24-002-503/</url><param name="family">DEMO-SUITE</param><param name="license type">renewal</param><param name="term" unit="month">24</param><param name="seats">15–19</param></offer>
+    <offer id="504"><name>Demo Ambiguous A</name><vendorCode>DEMO-DUP</vendorCode></offer>
+    <offer id="505"><name>Demo Ambiguous B</name><vendorCode>DEMO-DUP</vendorCode></offer>
+  </offers></shop>
+</yml_catalog>
