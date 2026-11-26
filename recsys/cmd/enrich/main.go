@@ -39,6 +39,7 @@ func run(ctx context.Context, args []string, output, diagnostics io.Writer) erro
 	cutoffRaw := flags.String("cutoff", "", "optional RFC3339 cutoff instant")
 	card := flags.String("card", "", "optional item ID for explanation")
 	publicPath := flags.String("public-text", "", "optional approved public excerpt JSON for chat ordering")
+	searchPath := flags.String("semantic-search", "", "optional JSON approving feed names and per-item queries for embeddings")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -87,7 +88,22 @@ func run(ctx context.Context, args []string, output, diagnostics io.Writer) erro
 			return err
 		}
 	}
-	result, err := enrichment.Build(ctx, feed, *snapshot, cutoff, offers, items, review, nil)
+	var search enrichment.Searcher
+	if *searchPath != "" {
+		var approval explain.SearchApproval
+		if err := readJSON(*searchPath, &approval); err != nil {
+			return err
+		}
+		provider, err := explain.EmbeddingsFromEnv()
+		if err != nil {
+			return err
+		}
+		search, err = explain.NewCatalogSearch(provider, feed, offers, approval)
+		if err != nil {
+			return err
+		}
+	}
+	result, err := enrichment.Build(ctx, feed, *snapshot, cutoff, offers, items, review, search)
 	if err != nil {
 		return err
 	}

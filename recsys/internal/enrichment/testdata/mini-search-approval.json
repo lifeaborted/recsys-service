@@ -1,0 +1,13 @@
+{
+  "feed_url": "https://example.com/demo-feed.xml",
+  "catalog_version": "mini-v1",
+  "approved": true,
+  "queries": {
+    "DEMO-WRONG-SKU": {
+      "text": "Instruct: Retrieve the software offer matching the requested product and license type.\nQuery: Demo Suite new base license",
+      "source_url": "https://example.com/demo-feed.xml",
+      "version": "mini-v1",
+      "approved": true
+    }
+  }
+}

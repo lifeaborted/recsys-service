@@ -152,11 +152,15 @@ func (f searchFunc) Search(ctx context.Context, version string, q enrichment.Sea
 
 func TestSearchOnlySuggests(t *testing.T) {
 	matcher := enrichment.NewMatcher("mini-v1", []enrichment.Offer{{ID: "501", SKU: "BASE", Name: "Suite"}}, searchFunc(func(_ context.Context, version string, q enrichment.SearchQuery, _ int) ([]enrichment.SearchHit, error) {
-		if version != "mini-v1" || q.SKU != "RENEWAL" {
+		if version != "mini-v1" || q.ItemID != "x" || q.SKU != "RENEWAL" {
 			t.Fatal("wrong search scope")
 		}
 		return []enrichment.SearchHit{{OfferID: "501", Basis: "similar title"}}, nil
 	}))
+	exact, err := matcher.Match(context.Background(), enrichment.Item{ID: "exact", SKU: "BASE", Name: "Suite"})
+	if err != nil || exact.Status != "selected" || exact.OfferID != "501" || len(exact.SearchHits) != 0 {
+		t.Fatalf("unexpected exact match %+v, %v", exact, err)
+	}
 	match, err := matcher.Match(context.Background(), enrichment.Item{ID: "x", SKU: "RENEWAL", Name: "Suite"})
 	if err != nil || match.Status != "review" || match.OfferID != "" || !slices.Equal(match.Candidates, []string{"501"}) {
 		t.Fatalf("unexpected fuzzy match %+v, %v", match, err)

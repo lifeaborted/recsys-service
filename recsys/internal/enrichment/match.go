@@ -17,8 +17,9 @@ type Item struct {
 }
 
 type SearchQuery struct {
-	SKU  string
-	Name string
+	ItemID domain.ItemID
+	SKU    string
+	Name   string
 }
 
 type SearchHit struct {
@@ -26,7 +27,7 @@ type SearchHit struct {
 	Basis   string `json:"basis"`
 }
 
-// Searcher returns suggestions scoped to the requested catalog version.
+// Searcher returns ranked suggestions scoped to the requested catalog version.
 type Searcher interface {
 	Search(ctx context.Context, version string, query SearchQuery, limit int) ([]SearchHit, error)
 }
@@ -101,27 +102,26 @@ func (m *Matcher) Match(ctx context.Context, item Item) (Match, error) {
 	if m.search == nil || (sku == "" && name == "") {
 		return result, nil
 	}
-	hits, err := m.search.Search(ctx, m.version, SearchQuery{SKU: item.SKU, Name: item.Name}, 10)
+	hits, err := m.search.Search(ctx, m.version, SearchQuery{ItemID: item.ID, SKU: item.SKU, Name: item.Name}, 10)
 	if err != nil {
 		return result, err
 	}
+	seenOffers := make(map[string]bool)
+	seenHits := make(map[SearchHit]bool)
 	for _, hit := range hits {
 		if _, ok := m.offers[hit.OfferID]; !ok {
 			return result, fmt.Errorf("search returned offer %q outside catalog %q", hit.OfferID, m.version)
 		}
-		result.Candidates = append(result.Candidates, hit.OfferID)
+		if !seenHits[hit] {
+			result.SearchHits = append(result.SearchHits, hit)
+			seenHits[hit] = true
+		}
+		if !seenOffers[hit.OfferID] {
+			result.Candidates = append(result.Candidates, hit.OfferID)
+			seenOffers[hit.OfferID] = true
+		}
 	}
 	if len(result.Candidates) > 0 {
-		result.SearchHits = slices.Clone(hits)
-		slices.SortFunc(result.SearchHits, func(a, b SearchHit) int {
-			if a.OfferID == b.OfferID {
-				return strings.Compare(a.Basis, b.Basis)
-			}
-			return strings.Compare(a.OfferID, b.OfferID)
-		})
-		result.SearchHits = slices.Compact(result.SearchHits)
-		slices.Sort(result.Candidates)
-		result.Candidates = slices.Compact(result.Candidates)
 		result.Status, result.Method, result.Basis = "review", "search", "search candidates require verification"
 	}
 	return result, nil
