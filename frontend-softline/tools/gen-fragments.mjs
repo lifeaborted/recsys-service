@@ -77,7 +77,14 @@ const recoLink =
   '</svg>' +
   '<span class="nav-list__text text-weight-regular text-size-lg sl-color-text">Тест рекомендаций</span>' +
   "</a></li>";
-sidebar = sidebar.replace('<ul class="nav-list">', '<ul class="nav-list">' + recoLink);
+const demoLink =
+  '<li class="nav-list__item"><a href="#/demo" class="nav-list__link">' +
+  '<svg class="icon icon-size-16 sl-color-icon nav-list__icon" aria-hidden="true" viewBox="0 0 16 16">' +
+  '<path d="M2 12l3-4 3 2 3-6 3 3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>' +
+  '</svg>' +
+  '<span class="nav-list__text text-weight-regular text-size-lg sl-color-text">Рекомендации (демо)</span>' +
+  "</a></li>";
+sidebar = sidebar.replace('<ul class="nav-list">', '<ul class="nav-list">' + recoLink + demoLink);
 
 const chunks = {
   ALERT_HTML: localize(html.slice(...Object.values(divBefore(html, 'class="alert-wrapper"')))),

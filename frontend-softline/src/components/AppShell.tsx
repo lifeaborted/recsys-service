@@ -7,6 +7,7 @@ import { Fragment } from "./Fragment";
 
 const HASH: Record<RouteKey, string> = {
   overview: "#/overview",
+  demo: "#/demo",
   recommendations: "#/recommendations",
   catalog: "#/catalog",
   invoices: "#/invoices",

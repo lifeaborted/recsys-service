@@ -1,0 +1,10 @@
+{
+  "request_id": "demo-empty-1",
+  "snapshot_id": "demo-v1",
+  "partial_reason": null,
+  "items": [],
+  "graph": {
+    "nodes": [],
+    "edges": []
+  }
+}

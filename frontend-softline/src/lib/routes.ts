@@ -1,5 +1,6 @@
 export const ROUTES = [
   "overview",
+  "demo",
   "recommendations",
   "catalog",
   "invoices",
@@ -18,6 +19,7 @@ export type RouteKey = (typeof ROUTES)[number];
 
 export const ROUTE_TITLES: Record<RouteKey, { title: string; caption: string }> = {
   overview: { title: "Главная", caption: "Личный кабинет" },
+  demo: { title: "Рекомендации", caption: "Демо ЛК: карточки и варианты" },
   recommendations: { title: "Тест рекомендаций", caption: "Проверка БД и алгоритма" },
   catalog: { title: "Продукты", caption: "Каталог Softline" },
   invoices: { title: "Счета и платежи", caption: "Счета и платежи" },

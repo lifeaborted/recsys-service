@@ -1,0 +1,7 @@
+{
+  "request_id": "demo-error-1",
+  "error": {
+    "code": "model_unavailable",
+    "message": "Синтетическая ошибка: модель временно недоступна"
+  }
+}

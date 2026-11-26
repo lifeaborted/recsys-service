@@ -9,7 +9,20 @@ go vet ./...
 go run ./cmd/api
 ```
 
-`GET http://127.0.0.1:8080/api/v1/health` возвращает `503` и `{"status":"not_ready"}`, пока проверка схемы и подключения к БД не реализована. Адрес можно задать переменной `RECSYS_ADDR`. Остальные операции описаны в черновике OpenAPI. CLI-заглушки завершаются с кодом 2.
+`GET http://127.0.0.1:8080/api/v1/health` возвращает `ok`, если схема `recommendations`
+доступна (в mock-режиме — всегда `ok`). Адрес задаётся `RECSYS_ADDR`, подключение —
+`RECSYS_DATABASE_URL`. Подмена транспорта: `RECSYS_MOCK=1` раздаёт синтетику из `api/examples`.
+
+Работа с БД и импорт дампа:
+
+```sh
+go run ./cmd/migration up
+go run ./cmd/migration seed
+go run ./cmd/import -file E:\recommendations.sql -truncate
+```
+
+Демо-экран личного кабинета и передача участника 5 — в `docs/demo/README.md` и
+`tests/e2e/demo/HANDOFF.md`. Остальные операции описаны в черновике OpenAPI.
 
 ## Пять зон работы
 

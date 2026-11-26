@@ -1,0 +1,100 @@
+{
+  "request_id": "demo-full-1",
+  "snapshot_id": "demo-v1",
+  "partial_reason": null,
+  "items": [
+    {
+      "item_id": "DEMO-RENEW-12",
+      "offer_id": "demo-offer-renew-12",
+      "sku": "DEMO-RENEW",
+      "recommendation_kind": "renewal",
+      "family_id": "DEMO-SUITE",
+      "title": "Продление на 12 месяцев",
+      "url": "https://store.softline.ru/demo/renew-12",
+      "explanation": "Для купленной редакции доступно продление на 12 или 24 месяца.",
+      "variants": [
+        {
+          "item_id": "DEMO-RENEW-12",
+          "url": "https://store.softline.ru/demo/renew-12",
+          "differences": [
+            {"field": "term", "value": 12, "unit": "month", "source": "synthetic-offer-12"},
+            {"field": "expires_at", "value": null, "unit": "date", "source": "synthetic-unknown-expiry"}
+          ]
+        },
+        {
+          "item_id": "DEMO-RENEW-24",
+          "url": "https://store.softline.ru/demo/renew-24",
+          "differences": [
+            {"field": "term", "value": 24, "unit": "month", "source": "synthetic-offer-24"},
+            {"field": "expires_at", "value": "2028-11-26", "unit": "date", "source": "synthetic-offer-24"}
+          ]
+        }
+      ],
+      "evidence_ids": ["demo-renewal"]
+    },
+    {
+      "item_id": "DEMO-UPGRADE",
+      "offer_id": "demo-offer-upgrade",
+      "sku": "DEMO-UPG",
+      "recommendation_kind": "upgrade",
+      "family_id": null,
+      "title": "Апгрейд редакции",
+      "url": "https://store.softline.ru/demo/upgrade",
+      "explanation": "Похожие клиенты переходили на старшую редакцию в течение месяца.",
+      "variants": [],
+      "evidence_ids": ["demo-upgrade"]
+    },
+    {
+      "item_id": "DEMO-COMPLEMENT",
+      "offer_id": "demo-offer-complement",
+      "sku": "DEMO-COMP",
+      "recommendation_kind": "complement",
+      "family_id": null,
+      "title": "Дополнительный модуль",
+      "url": "https://store.softline.ru/demo/complement",
+      "explanation": "Часто подключают вместе с сервисами из вашего портфеля.",
+      "variants": [],
+      "evidence_ids": ["demo-complement"]
+    }
+  ],
+  "graph": {
+    "nodes": [
+      {"id": "item:DEMO-BASE", "type": "product", "label": "Купленная редакция"},
+      {"id": "item:DEMO-RENEW-12", "type": "product", "label": "Продление на 12 месяцев"},
+      {"id": "item:DEMO-UPGRADE", "type": "product", "label": "Апгрейд редакции"},
+      {"id": "item:DEMO-COMPLEMENT", "type": "product", "label": "Дополнительный модуль"}
+    ],
+    "edges": [
+      {
+        "id": "demo-renewal",
+        "from": "item:DEMO-BASE",
+        "to": "item:DEMO-RENEW-12",
+        "type": "renewal",
+        "weight": 1,
+        "reason": "Совместимая редакция в синтетическом наборе.",
+        "source": "synthetic-rule-1",
+        "snapshot_id": "demo-v1"
+      },
+      {
+        "id": "demo-upgrade",
+        "from": "item:DEMO-BASE",
+        "to": "item:DEMO-UPGRADE",
+        "type": "upgrade",
+        "weight": 0.86,
+        "reason": "Похожие клиенты выбрали старшую редакцию.",
+        "source": "synthetic-rule-2",
+        "snapshot_id": "demo-v1"
+      },
+      {
+        "id": "demo-complement",
+        "from": "item:DEMO-BASE",
+        "to": "item:DEMO-COMPLEMENT",
+        "type": "complement",
+        "weight": 0.73,
+        "reason": "Дополнительный модуль импульсов вместе с редакцией.",
+        "source": "synthetic-rule-3",
+        "snapshot_id": "demo-v1"
+      }
+    ]
+  }
+}

@@ -2,17 +2,21 @@ import { useEffect, useState } from "react";
 import { AppShell } from "./components/AppShell";
 import { parseRoute, type RouteKey } from "./lib/routes";
 import { CatalogPage } from "./pages/CatalogPage";
+import { DemoPage } from "./pages/DemoPage";
 import { InvoicesPage, KeysPage, NotificationsPage, OrdersPage, StaticPage } from "./pages/TablesPage";
 import { OverviewPage } from "./pages/OverviewPage";
 import { ProfilePage } from "./pages/ProfilePage";
 import { RecommendationsPage } from "./pages/RecommendationsPage";
 import { DebugProvider } from "./state/debug";
+import { SessionProvider } from "./state/session";
 import { SettingsProvider } from "./state/settings";
 
 function Page({ route }: { route: RouteKey }) {
   switch (route) {
     case "overview":
       return <OverviewPage />;
+    case "demo":
+      return <DemoPage />;
     case "recommendations":
       return <RecommendationsPage />;
     case "catalog":
@@ -57,11 +61,13 @@ export function App() {
 
   return (
     <SettingsProvider>
-      <DebugProvider>
-        <AppShell route={route}>
-          <Page route={route} />
-        </AppShell>
-      </DebugProvider>
+      <SessionProvider>
+        <DebugProvider>
+          <AppShell route={route}>
+            <Page route={route} />
+          </AppShell>
+        </DebugProvider>
+      </SessionProvider>
     </SettingsProvider>
   );
 }

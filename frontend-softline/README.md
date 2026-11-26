@@ -21,22 +21,23 @@ npm run build
 npm run preview    # http://localhost:4173
 ```
 
-По умолчанию фронтенд работает в **live-режиме** и ходит на Go API из
-`../bd-for-test/cmd/api` (порт 8000 через прокси Vite). Mock-режим можно включить в **Профиле**.
+По умолчанию фронтенд работает в **live-режиме** и ходит на Go API проекта `recsys`
+(порт 8080 через прокси Vite: `/api` → `/api/v1`). Mock-режим можно включить в **Профиле**.
 
-БД и API лежат отдельно — в `E:\github-project\recsys-service\bd-for-test`:
+БД, миграции, импорт и API — в `E:\github-project\recsys-service\recsys`:
 
 ```bash
-cd ../bd-for-test
-go run ./cmd/migration up    # схема (создаст БД recsys при необходимости)
-go run ./cmd/migration seed  # демо-данные, если полный дамп ещё не залит
-go run ./cmd/api             # REST API на :8000
+cd ../recsys
+go run ./cmd/migration up                                # схема (создаст БД при необходимости)
+go run ./cmd/migration seed                              # демо-данные, если дамп ещё не залит
+go run ./cmd/import -file E:\recommendations.sql -truncate # полный дамп, 260 тыс. строк
+go run ./cmd/api                                         # REST API на :8080
 ```
 
-Подробности — в `bd-for-test/README.md`. Страница **«Тест рекомендаций»**
-(`#/recommendations`, ссылка в боковом меню) показывает счётчики БД, выдачу,
-кнопки `click`/`purchase`, создание нового run и историю run'ов. Полный дамп на
-260 тыс. строк можно залить командой `cd ../bd-for-test && go run ./cmd/import -truncate`.
+Подробности — в `recsys/README.md` и `recsys/docs/demo/README.md`. Страница
+**«Тест рекомендаций»** (`#/recommendations`) показывает счётчики БД, выдачу,
+кнопки `click`/`purchase`, создание нового run и историю run'ов. Демо-экран
+по `05-DEMO.md` доступен по адресу `#/demo` (подмена транспорта mock/http, Bearer-сессии).
 
 ## Что где лежит
 
