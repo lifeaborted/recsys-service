@@ -162,3 +162,90 @@ func TestSearchOnlySuggests(t *testing.T) {
 		t.Fatalf("unexpected fuzzy match %+v, %v", match, err)
 	}
 }
+
+func TestMatchNormalizesV4SKU(t *testing.T) {
+	matcher := enrichment.NewMatcher("mini-v1", []enrichment.Offer{
+		{ID: "101", SKU: "  аб-00.12 "},
+		{ID: "102", URL: "https://example.com/software/аб_00-12-102/"},
+		{ID: "205", URL: "https://example.com/software/zn-000_42-205/?view=full"},
+		{ID: "302", SKU: "ZZ/00_7"},
+		{ID: "301", SKU: "zz-00.7"},
+		{ID: "303", URL: "https://example.com/software/zz-007-303/"},
+	}, nil)
+
+	for _, tc := range []struct {
+		name, sku, status, method, offerID, basis string
+		candidates                                []string
+	}{
+		{"vendor code before URL", "Аб / 00_12", "selected", "vendor_code", "101", "АБ0012", []string{"101"}},
+		{"URL strips only offer suffix", "Zn 000.42", "selected", "url_code", "205", "ZN00042", []string{"205"}},
+		{"URL suffix is not part of SKU", "ZN00042205", "unmatched", "", "", "no exact match", []string{}},
+		{"leading zeros are significant", "zn-42", "unmatched", "", "", "no exact match", []string{}},
+		{"normalized vendor code collision", "ZZ 0-07", "ambiguous", "vendor_code", "", "multiple offers match ZZ007", []string{"301", "302"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := matcher.Match(context.Background(), enrichment.Item{ID: "item", SKU: tc.sku})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got.Status != tc.status || got.Method != tc.method || got.OfferID != tc.offerID ||
+				got.Basis != tc.basis || !slices.Equal(got.Candidates, tc.candidates) {
+				t.Fatalf("unexpected match: %+v", got)
+			}
+		})
+	}
+}
+
+func TestReadFeedV4ParameterAliases(t *testing.T) {
+	read := func(params string) (map[string]enrichment.Fact, error) {
+		const start = `<yml_catalog date="2026-11-26T10:00:00Z"><shop><offers><offer id="501">`
+		const end = `</offer></offers></shop></yml_catalog>`
+		var facts map[string]enrichment.Fact
+		_, err := enrichment.ReadFeed(strings.NewReader(start+params+end), "mini-v1", "https://example.com/feed.xml", time.UTC,
+			func(_ enrichment.FeedVersion, offer enrichment.Offer) error {
+				facts = offer.Facts
+				return nil
+			})
+		return facts, err
+	}
+
+	const current = `<param name="platform">x86-64</param><param name="term" unit="month">12</param>`
+	const v4 = `<param name="Совместимая архитектура/платформа">x86-64</param><param name="Срок действия" unit="month">12</param>`
+	want, err := read(current)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := read(v4)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, field := range []string{"platform", "term"} {
+		if got[field].Value == nil || got[field].Source == nil || !reflect.DeepEqual(got[field], want[field]) {
+			t.Errorf("%s: got %+v, expected %+v", field, got[field], want[field])
+		}
+	}
+
+	for _, tc := range []struct{ name, params, wantErr string }{
+		{"empty values", `<param name="Совместимая архитектура/платформа"> </param><param name="Срок действия" unit="month"></param>`, ""},
+		{"conflicting platform", v4 + `<param name="платформа">ARM64</param>`, "conflicting platform"},
+		{"conflicting term unit", v4 + `<param name="срок" unit="year">12</param>`, "conflicting term"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			facts, err := read(tc.params)
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("wanted %q, got %v", tc.wantErr, err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, field := range []string{"platform", "term"} {
+				if fact, ok := facts[field]; !ok || fact.Value != nil || fact.Source != nil || fact.Unit != "" {
+					t.Errorf("%s: wanted unknown fact, got %+v", field, fact)
+				}
+			}
+		})
+	}
+}

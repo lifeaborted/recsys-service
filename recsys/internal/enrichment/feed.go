@@ -59,9 +59,10 @@ var parameterNames = map[string]string{
 	"family": "family", "семейство": "family",
 	"edition": "edition", "редакция": "edition",
 	"platform": "platform", "платформа": "platform",
+	"совместимая архитектура/платформа": "platform",
 	"license type": "license_type", "тип лицензии": "license_type",
 	"seats": "seats", "места": "seats",
-	"term": "term", "срок": "term",
+	"term": "term", "срок": "term", "срок действия": "term",
 }
 
 // ReadFeed visits offers in source order. Publish the resulting batch only after it returns nil.

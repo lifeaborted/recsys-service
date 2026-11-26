@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"unicode"
 
 	"recsys/internal/domain"
 )
@@ -66,7 +67,15 @@ func NewMatcher(version string, offers []Offer, search Searcher) *Matcher {
 	return matcher
 }
 
-func normalizeSKU(s string) string  { return strings.ToUpper(strings.TrimSpace(s)) }
+func normalizeSKU(s string) string {
+	return strings.Map(func(r rune) rune {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			return unicode.ToUpper(r)
+		}
+		return -1
+	}, s)
+}
+
 func normalizeName(s string) string { return strings.ToLower(strings.Join(strings.Fields(s), " ")) }
 
 func (m *Matcher) Match(ctx context.Context, item Item) (Match, error) {
