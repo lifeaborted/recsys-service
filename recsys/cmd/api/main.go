@@ -16,6 +16,7 @@ import (
 	"recsys/internal/config"
 	"recsys/internal/contract"
 	"recsys/internal/domain"
+	"recsys/internal/explain"
 	"recsys/internal/logger"
 	"recsys/internal/recommend"
 	"recsys/internal/store/postgres"
@@ -143,7 +144,11 @@ func main() {
 		httpCfg.Catalog = adapter
 		httpCfg.Purchases = adapter
 		// Constructor-injected contract.Recommender (single wiring point for final assembly).
-		httpCfg.Recommender = recommend.New(store)
+		engine := recommend.New(store)
+		if os.Getenv("LLM_BASE_URL") != "" && os.Getenv("LLM_MODEL") != "" {
+			engine.UseReranker(explain.ChatFromEnv())
+		}
+		httpCfg.Recommender = engine
 	}
 
 	server := &http.Server{

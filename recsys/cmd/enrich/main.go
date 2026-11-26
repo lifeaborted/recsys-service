@@ -14,6 +14,7 @@ import (
 	"recsys/internal/domain"
 	"recsys/internal/enrichment"
 	"recsys/internal/explain"
+	"recsys/internal/store/postgres"
 	_ "time/tzdata"
 )
 
@@ -40,6 +41,7 @@ func run(ctx context.Context, args []string, output, diagnostics io.Writer) erro
 	card := flags.String("card", "", "optional item ID for explanation")
 	publicPath := flags.String("public-text", "", "optional approved public excerpt JSON for chat ordering")
 	searchPath := flags.String("semantic-search", "", "optional JSON approving feed names and per-item queries for embeddings")
+	vectorIndex := flags.Bool("vector-index", false, "read catalog vectors already stored in DATABASE_URL")
 	proposalPath := flags.String("propose-relation", "", "extract a relation proposal from one approved source JSON")
 	if err := flags.Parse(args); err != nil {
 		return err
@@ -116,7 +118,32 @@ func run(ctx context.Context, args []string, output, diagnostics io.Writer) erro
 		if err != nil {
 			return err
 		}
-		search, err = explain.NewCatalogSearch(provider, feed, offers, approval)
+		if *vectorIndex {
+			if os.Getenv("DATABASE_URL") == "" {
+				return fmt.Errorf("vector index requires DATABASE_URL")
+			}
+			openCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+			store, err := postgres.OpenContext(openCtx, os.Getenv("DATABASE_URL"))
+			cancel()
+			if err != nil {
+				return err
+			}
+			defer store.Close()
+			model := os.Getenv("EMBED_MODEL")
+			search, err = explain.NewStoredSearch(provider, feed, approval, func(ctx context.Context, vector []float64, limit int) ([]enrichment.SearchHit, error) {
+				rows, err := store.NearestOffers(ctx, model, vector, limit)
+				if err != nil {
+					return nil, err
+				}
+				hits := make([]enrichment.SearchHit, len(rows))
+				for i, row := range rows {
+					hits[i] = enrichment.SearchHit{OfferID: row.OfferID, Basis: fmt.Sprintf("stored offer cosine similarity %.6f (model %s)", row.Score, model)}
+				}
+				return hits, nil
+			})
+		} else {
+			search, err = explain.NewCatalogSearch(provider, feed, offers, approval)
+		}
 		if err != nil {
 			return err
 		}

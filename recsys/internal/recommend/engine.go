@@ -22,9 +22,15 @@ type Reader interface {
 	Products(context.Context, string, []domain.ItemID) (map[domain.ItemID]Product, error)
 }
 
-type Engine struct{ reader Reader }
+type Engine struct {
+	reader   Reader
+	reranker Reranker
+}
 
-func New(r Reader) *Engine { return &Engine{r} }
+func New(r Reader) *Engine { return &Engine{reader: r} }
+
+// UseReranker reorders the online shortlist. Backtest order stays on the cascade.
+func (e *Engine) UseReranker(r Reranker) { e.reranker = r }
 
 var _ contract.Recommender = (*Engine)(nil)
 
@@ -161,11 +167,18 @@ func (e *Engine) Recommend(ctx context.Context, q contract.RecommendationQuery) 
 		}
 		var ordered []ranked
 		for id, r := range best {
-			if eligible(cards[id], client, platforms, q.Mode) {
-				ordered = append(ordered, r)
+			if !eligible(cards[id], client, platforms, q.Mode) {
+				continue
 			}
+			if q.Mode == contract.Online && sameCategoryRival(cards[id], products, r.kind) {
+				continue
+			}
+			ordered = append(ordered, r)
 		}
 		slices.SortFunc(ordered, compare)
+		if q.Mode == contract.Online {
+			ordered = rerankOnline(ctx, e.reranker, ordered, cards, products)
+		}
 		result := render(s.ID, q.Mode, ordered, cards)
 		if len(more) == 0 {
 			return result, nil

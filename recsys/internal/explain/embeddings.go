@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 type Embedding struct {
@@ -96,7 +97,63 @@ func (e *Embeddings) Embed(ctx context.Context, inputs []PublicText) ([]Embeddin
 	return result, nil
 }
 
+// EmbedNames stores vectors for public catalog titles. It does not require a source URL.
+func (e *Embeddings) EmbedNames(ctx context.Context, names []string) ([]Embedding, error) {
+	result := make([]Embedding, len(names))
+	position := make(map[string][]int)
+	pending := []string{}
+	for i, name := range names {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			return nil, fmt.Errorf("catalog name is empty")
+		}
+		if _, exists := position[name]; !exists {
+			pending = append(pending, name)
+		}
+		position[name] = append(position[name], i)
+	}
+	e.mutex.Lock()
+	defer e.mutex.Unlock()
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	missing := make([]string, 0, len(pending))
+	for _, value := range pending {
+		if _, exists := e.cache[InputHash(value)]; !exists {
+			missing = append(missing, value)
+		}
+	}
+	for start := 0; start < len(missing); start += e.batchSize {
+		batch := missing[start:min(start+e.batchSize, len(missing))]
+		vectors, err := e.embedBatchWithin(ctx, batch, 120*time.Second)
+		if err != nil {
+			return nil, err
+		}
+		dimensions := len(vectors[0])
+		if e.dimensions != 0 && dimensions != e.dimensions {
+			return nil, fmt.Errorf("embedding dimensions changed")
+		}
+		e.dimensions = dimensions
+		for i, value := range batch {
+			hash := InputHash(value)
+			e.cache[hash] = Embedding{Model: e.config.Model, Dimensions: dimensions, InputHash: hash, Vector: vectors[i]}
+		}
+	}
+	for _, value := range pending {
+		embedding := e.cache[InputHash(value)]
+		for _, i := range position[value] {
+			result[i] = embedding
+			result[i].Vector = slices.Clone(embedding.Vector)
+		}
+	}
+	return result, nil
+}
+
 func (e *Embeddings) embedBatch(ctx context.Context, batch []string) ([][]float64, error) {
+	return e.embedBatchWithin(ctx, batch, 15*time.Second)
+}
+
+func (e *Embeddings) embedBatchWithin(ctx context.Context, batch []string, deadline time.Duration) ([][]float64, error) {
 	var response struct {
 		Model string `json:"model"`
 		Data  []struct {
@@ -108,7 +165,7 @@ func (e *Embeddings) embedBatch(ctx context.Context, batch []string) ([][]float6
 		Model string   `json:"model"`
 		Input []string `json:"input"`
 	}{e.config.Model, batch}
-	if err := request(ctx, e.config, "/embeddings", payload, &response); err != nil {
+	if err := requestWithTimeout(ctx, e.config, "/embeddings", payload, &response, deadline); err != nil {
 		return nil, err
 	}
 	if (response.Model != "" && response.Model != e.config.Model) || len(response.Data) != len(batch) {

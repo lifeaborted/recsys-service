@@ -18,6 +18,7 @@ type Product struct {
 	Available, InSales     bool
 	FamilyID, FamilySource string
 	Differences            []domain.Difference
+	Vendor, CategoryID     string
 }
 
 func eligible(p Product, client domain.Client, platforms map[string]bool, mode contract.Mode) bool {
@@ -34,6 +35,32 @@ func eligible(p Product, client domain.Client, platforms map[string]bool, mode c
 		return false
 	}
 	return p.Available && p.OfferID != nil && *p.OfferID != ""
+}
+
+// sameCategoryRival drops a different vendor in a category the buyer already owns.
+// Documented renewal, upgrade and complement edges stay: those are the same product line or an add-on.
+func sameCategoryRival(candidate Product, owned map[domain.ItemID]Product, kind domain.RecommendationKind) bool {
+	if kind == domain.Renewal || kind == domain.Upgrade || kind == domain.Complement {
+		return false
+	}
+	vendor, category := normalizeVendor(candidate.Vendor), strings.TrimSpace(candidate.CategoryID)
+	if vendor == "" || category == "" {
+		return false
+	}
+	for _, have := range owned {
+		if strings.TrimSpace(have.CategoryID) != category {
+			continue
+		}
+		known := normalizeVendor(have.Vendor)
+		if known != "" && known != vendor {
+			return true
+		}
+	}
+	return false
+}
+
+func normalizeVendor(name string) string {
+	return strings.Join(strings.Fields(strings.ToLower(name)), " ")
 }
 
 func eligibleOrganization(restriction string, client domain.Client) bool {
