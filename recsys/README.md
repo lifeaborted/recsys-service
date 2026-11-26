@@ -26,7 +26,7 @@ make build-signals ARGS="-database -dataset demo-pipeline -snapshot pipeline-v1 
 make backtest ARGS="-clients testdata/smoke/clients.csv -sales testdata/smoke/sales.csv -label demo"
 ```
 
-`import -dry-run` проверяет CSV без записи. Публикация CSV с `-version v4` требует `-workbook-sha256` исходной книги. При перенаправлении JSON используйте `make -s enrich`, чтобы Make не добавлял команду в начало файла. В `build-signals` артефакт доказательств и исторические таблицы используются до публикации активного снимка. Для покупки выбранный `offer_id` должен быть загружен в витрину с соответствием каноническому `item_id`. Мини-фид проверяет публикацию фактов, а готовую витрину для покупки создаёт `make seed`. Эмбеддинги в этих сценариях выключены.
+`import -dry-run` проверяет CSV без записи. Публикация CSV v4 или v5 требует `-workbook-sha256` исходной книги. При перенаправлении JSON используйте `make -s enrich`, чтобы Make не добавлял команду в начало файла. В `build-signals` артефакт доказательств и исторические таблицы используются до публикации активного снимка. Для покупки выбранный `offer_id` должен быть загружен в витрину с соответствием каноническому `item_id`. Мини-фид проверяет публикацию фактов, а готовую витрину для покупки создаёт `make seed`. Эмбеддинги в этих сценариях выключены.
 
 ## Модульные и сквозные проверки
 
@@ -40,24 +40,27 @@ make backtest ARGS="-clients testdata/smoke/clients.csv -sales testdata/smoke/sa
 
 `make check` выполняет сборку, vet, unit и проверку JSON. `make test-e2e` требует Docker Compose и PowerShell 7. Каждый запуск создаёт проект, сеть, PostgreSQL на tmpfs и отдельные синтетические данные. Рабочий DSN исключается из окружения теста. [Фактические результаты](docs/demo/INTEGRATION.md).
 
-## Закрытая оценка v4
+## Закрытая оценка v5
 
-Восстановите проверенный дамп в отдельную чистую БД PostgreSQL 17, задайте её `DATABASE_URL` и выполните:
+Восстановите `recommendations-v5.sql` в отдельную пустую БД PostgreSQL 17, задайте её `DATABASE_URL` и выполните:
 
 ```sh
 go run ./cmd/migration up
-go run ./cmd/import -verify-v4
-go run ./cmd/build-signals -database -dataset v4 -snapshot v4-integration-20260831 -train-through 2026-08-31
-go run ./cmd/backtest -snapshot v4-integration-20260831
+go run ./cmd/import -verify-v5
+go run ./cmd/backtest -dataset v5 -snapshot v5-train-20260831
 ```
 
-Сверьте SHA-256 книги с `recommendations.dataset_release` и шесть строк Go с `python baseline.py Датасет_Рекомендации_ЛК_v4.xlsx`. A — 337 клиентов, Precision@3 популярности и совместных покупок 5,44% и 5,64%. B — 172 клиента, 7,36% и 6,01%. В главной таблице гибрида используется топ-3 из 817 товаров продаж и закреплённый снимок. Train заканчивается неделей 31.08.2026 включительно. Корзина — `(order_id, order_week)`. Приватные входы и DSN храните локально.
+Дамп содержит готовый снимок. Чтобы построить свой, выполните `go run ./cmd/build-signals -database -dataset v5 -snapshot <новый-id> -train-through 2026-08-31` и подставьте его ID в `backtest`.
+
+Сверяйте исходную книгу по SHA-256 из `recommendations.dataset_release`. Эталон организаторов — обновлённый `baseline.py` на книге v5. В историческом топ-3 допускаются все 817 товаров продаж вне зависимости от наличия и соответствия оффера. Когорта A содержит 337 клиентов, B — 172. Версия v5 добавляет 419 групп товаров. Попадание считается вариантом, если его `product_group` встречается среди покупок клиента в train. Закрытые входы, дамп и DSN храните локально.
+
+В онлайн-выдаче применяются доступность, тип пользователя и тип организации из фида. Для оффера с конкретным типом организации профиль должен подтверждать этот тип. Каталожные атрибуты для демо публикуются из проверенного артефакта `enrich`.
 
 ## Пять зон работы
 
 | № | Ветка | Зона | Первый результат |
 |---|---|---|---|
-| 1 | `feat/data-eval` | `cmd/import`, `cmd/backtest`, `internal/data`, `internal/eval` | Сверка baseline v4 и оценка гибридного движка. |
+| 1 | `feat/data-eval` | `cmd/import`, `cmd/backtest`, `internal/data`, `internal/eval` | Сверка baseline v5 и оценка гибридного движка. |
 | 2 | `feat/recommend` | `cmd/build-signals`, `internal/signals`, `internal/recommend` | Общий `Recommend` на тестовом `FactsReader` и первые сигналы. |
 | 3 | `feat/evidence` | `cmd/enrich`, `internal/enrichment`, `internal/explain` | Верифицированная связь или отличие вариантов на синтетическом каталоге. |
 | 4 | `feat/platform` | `cmd/api`, `cmd/seed`, `internal/auth`, `internal/config`, `internal/logger`, `internal/transport`, `internal/store/postgres`, `migrations` | PostgreSQL-адаптер, сессия и сквозной запрос. Ведёт изменения `internal/domain`, `internal/contract` и `api/openapi.yaml`. |

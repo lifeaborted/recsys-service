@@ -57,18 +57,19 @@ type CatalogOfferRecord struct {
 
 // ItemFeature holds versioned product attributes and variant differences keyed by item_id.
 type ItemFeature struct {
-	ItemID       domain.ItemID
-	OfferID      *string
-	Title        string
-	SKU          *string
-	URL          *string
-	Platform     string
-	Audience     domain.ClientGroup
-	Available    bool
-	InSales      bool
-	FamilyID     string
-	FamilySource string
-	Differences  []domain.Difference
+	ItemID           domain.ItemID
+	OfferID          *string
+	Title            string
+	SKU              *string
+	URL              *string
+	Platform         string
+	Audience         domain.ClientGroup
+	OrganizationType string
+	Available        bool
+	InSales          bool
+	FamilyID         string
+	FamilySource     string
+	Differences      []domain.Difference
 }
 
 // PublishCatalogFeed stores a versioned feed in catalog_version_offers (keyed by (catalog_version, offer_id))
@@ -309,14 +310,14 @@ func writeItemFeatures(ctx context.Context, tx pgx.Tx, fv string, features []Ite
 		if _, err := tx.Exec(ctx, `
 			INSERT INTO recommendations.item_feature_versions (
 				feature_version, item_id, offer_id, title, sku, url,
-				platform, audience, available, in_sales, family_id, family_source, differences
+				platform, audience, available, in_sales, family_id, family_source, differences, organization_type
 			) VALUES (
 				$1, $2, $3, $4, $5, $6,
-				$7, $8, $9, $10, NULLIF($11, ''), NULLIF($12, ''), $13::jsonb
+				$7, $8, $9, $10, NULLIF($11, ''), NULLIF($12, ''), $13::jsonb, $14
 			)
 		`, fv, string(f.ItemID), f.OfferID, title, f.SKU, f.URL,
 			f.Platform, string(f.Audience), f.Available, f.InSales,
-			f.FamilyID, f.FamilySource, string(diffBytes),
+			f.FamilyID, f.FamilySource, string(diffBytes), f.OrganizationType,
 		); err != nil {
 			return fmt.Errorf("insert item_feature_versions %s: %w", f.ItemID, err)
 		}

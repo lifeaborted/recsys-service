@@ -1,6 +1,8 @@
 package recommend
 
 import (
+	"strings"
+
 	"recsys/internal/contract"
 	"recsys/internal/domain"
 )
@@ -12,20 +14,39 @@ type Product struct {
 	OfferID, SKU, URL      *string
 	Platform               string
 	Audience               domain.ClientGroup
+	OrganizationType       string
 	Available, InSales     bool
 	FamilyID, FamilySource string
 	Differences            []domain.Difference
 }
 
-func eligible(p Product, group domain.ClientGroup, platforms map[string]bool, mode contract.Mode) bool {
-	if p.Audience != "" && p.Audience != group {
+func eligible(p Product, client domain.Client, platforms map[string]bool, mode contract.Mode) bool {
+	if mode == contract.Backtest {
+		return p.InSales
+	}
+	if p.Audience != "" && p.Audience != client.Group {
 		return false
 	}
 	if p.Platform != "" && len(platforms) > 0 && !platforms[p.Platform] {
 		return false
 	}
-	if mode == contract.Backtest {
-		return p.InSales
+	if !eligibleOrganization(p.OrganizationType, client) {
+		return false
 	}
 	return p.Available && p.OfferID != nil && *p.OfferID != ""
+}
+
+func eligibleOrganization(restriction string, client domain.Client) bool {
+	switch restriction {
+	case "", "не определено":
+		return true
+	case "для дома":
+		return client.Group == domain.B2C
+	}
+	if client.Group != domain.B2B {
+		return false
+	}
+	// Profile segments can describe company size. Require an explicit type match.
+	kind := strings.ToLower(strings.TrimSpace(client.Type))
+	return kind == restriction || kind == restriction+" организация" || (kind == "нко" && restriction == "некоммерческая")
 }

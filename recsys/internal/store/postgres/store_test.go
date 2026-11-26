@@ -82,7 +82,7 @@ func TestPostgresIntegration_ContractsTransactionsAndVersioning(t *testing.T) {
 		},
 		Sales: []domain.Sale{
 			// Same order_id "ORD-MULTI" observed in two distinct weeks!
-			{SourceRow: 2, OrderID: "ORD-MULTI", ClientID: "HIST-C1", OrderWeek: week1, ItemID: "ITEM-BASE", SKU: &skuBase, ItemName: "Base License"},
+			{SourceRow: 2, OrderID: "ORD-MULTI", ClientID: "HIST-C1", OrderWeek: week1, ItemID: "ITEM-BASE", SKU: &skuBase, ItemName: "Base License", ProductGroup: "G-BASE"},
 			{SourceRow: 3, OrderID: "ORD-MULTI", ClientID: "HIST-C1", OrderWeek: week2, ItemID: "ITEM-ADDON", ItemName: "Addon Module"},
 			{SourceRow: 4, OrderID: "ORD-FUTURE", ClientID: "HIST-C1", OrderWeek: weekAfterCutoff, ItemID: "ITEM-FUTURE", ItemName: "Future Upgrade"},
 		},
@@ -93,6 +93,11 @@ func TestPostgresIntegration_ContractsTransactionsAndVersioning(t *testing.T) {
 	}
 	if err := store.WriteDataset(ctx, "synth-test-v1", batches); err != nil {
 		t.Fatalf("WriteDataset run 2 (repeat idempotency): %v", err)
+	}
+
+	offline, err := store.OfflineDataset(ctx)
+	if err != nil || len(offline.Sales) != 3 || offline.Sales[0].ProductGroup != "G-BASE" || offline.Sales[1].ProductGroup != "" {
+		t.Fatalf("product_group round trip: %+v, err=%v", offline.Sales, err)
 	}
 
 	// Verify closed v4 import threshold check rolls back without clobbering synth-test-v1.

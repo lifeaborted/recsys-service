@@ -161,7 +161,7 @@ func (e *Engine) Recommend(ctx context.Context, q contract.RecommendationQuery) 
 		}
 		var ordered []ranked
 		for id, r := range best {
-			if eligible(cards[id], client.Group, platforms, q.Mode) {
+			if eligible(cards[id], client, platforms, q.Mode) {
 				ordered = append(ordered, r)
 			}
 		}

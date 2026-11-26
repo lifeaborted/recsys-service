@@ -1,4 +1,4 @@
-// Команда исторической оценки рекомендаций на закрытом наборе (v4 БД / v5 CSV) или синтетических CSV (demo).
+// Команда исторической оценки рекомендаций на закрытом наборе (v4/v5 БД или CSV) или синтетических CSV (demo).
 //
 //	go run ./cmd/backtest
 //	go run ./cmd/backtest -clients testdata/smoke/clients.csv -sales testdata/smoke/sales.csv -label demo
@@ -39,18 +39,19 @@ type backtestOutput struct {
 func main() {
 	clientsPath := flag.String("clients", "", "путь к clients.csv для автономного/demo/v5 прогона")
 	salesPath := flag.String("sales", "", "путь к sales.csv (v4 6 колонок или v5 7 колонок с product_group)")
-	label := flag.String("label", "", "метка набора данных (по умолчанию v4 для БД и demo для CSV)")
+	label := flag.String("label", "", "метка в отчёте (по умолчанию версия БД или demo)")
 	checkAnon := flag.Bool("check-anonymization", false, "проверить пороги обезличивания (>=3 / >=5)")
 	showCold := flag.Bool("show-cold-items", false, "показать список item_id холодных товаров (не для публичного отчёта)")
 	format := flag.String("format", "table", "формат вывода: table или json")
-	snapshot := flag.String("snapshot", "", "immutable v4 snapshot ID for hybrid evaluation")
+	snapshot := flag.String("snapshot", "", "immutable v4/v5 snapshot ID for hybrid evaluation")
+	dataset := flag.String("dataset", "", "версия закрытой БД: v4 или v5 (по умолчанию v5 либо версия снимка)")
 	flag.Parse()
 
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, nil))
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
-	if err := run(ctx, logger, *clientsPath, *salesPath, *label, *checkAnon, *showCold, *format, *snapshot); err != nil {
+	if err := run(ctx, logger, *clientsPath, *salesPath, *label, *checkAnon, *showCold, *format, *snapshot, *dataset); err != nil {
 		logger.Error("backtest failed", "error", err)
 		fmt.Fprintln(os.Stderr, "backtest:", err)
 		os.Exit(1)
@@ -62,7 +63,7 @@ func run(
 	logger *slog.Logger,
 	clientsPath, salesPath, label string,
 	checkAnon, showCold bool,
-	format, snapshot string,
+	format, snapshot, dataset string,
 ) error {
 	if (clientsPath != "") != (salesPath != "") {
 		return errors.New("для CSV-режима укажите одновременно -clients и -sales")
@@ -75,11 +76,11 @@ func run(
 	out.TrainThrough = eval.TrainThrough
 	out.TestFrom = ">" + eval.TrainThrough
 	out.LeakageWarnings = eval.DefaultLeakageWarnings()
-	out.HybridStatus = "baseline only; supply -snapshot for a pinned v4 hybrid run"
+	out.HybridStatus = "baseline only; supply -snapshot for a pinned hybrid run"
 
 	if clientsPath != "" {
 		if snapshot != "" {
-			return fmt.Errorf("-snapshot requires v4 PostgreSQL mode")
+			return fmt.Errorf("-snapshot requires PostgreSQL mode")
 		}
 		if strings.TrimSpace(label) == "" {
 			label = "demo"
@@ -111,14 +112,11 @@ func run(
 			"cohort_a", out.Summary.CohortAClients,
 		)
 	} else {
-		if strings.TrimSpace(label) == "" {
-			label = data.ExpectedV4Version
-		}
 		dsn, err := data.ResolveDatabaseURL()
 		if err != nil {
 			return err
 		}
-		logger.Info("connecting to v4 database", "dsn", data.MaskDSN(dsn))
+		logger.Info("connecting to closed database", "dsn", data.MaskDSN(dsn))
 
 		store, err := postgres.OpenContext(ctx, dsn)
 		if err != nil {
@@ -126,27 +124,36 @@ func run(
 		}
 		defer store.Close()
 
-		sha, sales, err := store.EvaluationV4(ctx)
-		if err != nil {
-			return fmt.Errorf("загрузить продажи v4: %w", err)
+		var meta postgres.SnapshotMetadata
+		if snapshot != "" {
+			meta, err = store.SnapshotMetadata(ctx, snapshot)
+			if err != nil {
+				return err
+			}
+			if dataset == "" {
+				dataset = meta.DatasetVersion
+			}
 		}
-		summary, anon, err := eval.VerifyV4Evaluation(sha, sales)
+		release, err := store.EvaluationDataset(ctx, dataset)
+		if err != nil {
+			return fmt.Errorf("загрузить закрытые продажи: %w", err)
+		}
+		if strings.TrimSpace(label) == "" {
+			label = release.Version
+		}
+		summary, anon, err := eval.VerifyClosedEvaluation(release.Version, release.SHA, release.Sales, release.ProductGroups)
 		if err != nil {
 			return err
 		}
 		out.Dataset = label
-		out.WorkbookSHA256 = sha
-		out.HasProductGroupColumn = false
+		out.WorkbookSHA256 = release.SHA
+		out.HasProductGroupColumn = release.Version == data.ExpectedV5Version
 		out.FeedGeneratedAt = "not used in the sales-only snapshot"
 		out.Summary = summary
-		out.Baselines = eval.Baselines(sales)
+		out.Baselines = eval.BaselinesWithGroups(release.Sales, eval.ProductGroupStrings(release.ProductGroups))
 		if snapshot != "" {
-			meta, err := store.SnapshotMetadata(ctx, snapshot)
-			if err != nil {
-				return err
-			}
-			if meta.DatasetVersion != "v4" || meta.WorkbookSHA256 != sha || meta.TrainThrough.Format(time.DateOnly) != eval.TrainThrough {
-				return fmt.Errorf("snapshot does not match v4 release and train cutoff")
+			if meta.DatasetVersion != release.Version || meta.WorkbookSHA256 != release.SHA || meta.TrainThrough.Format(time.DateOnly) != eval.TrainThrough {
+				return fmt.Errorf("snapshot does not match %s release and train cutoff", release.Version)
 			}
 			batch, err := store.OfflineDataset(ctx)
 			if err != nil {
@@ -171,7 +178,7 @@ func run(
 				}
 			}
 			report, err := eval.EvaluateRecommender(ctx, recommend.New(store), batch.Clients, batch.Sales, eval.BacktestConfig{
-				DatasetLabel: "v4", SnapshotID: snapshot, AllowedItems: allowed, ItemFamilies: families, FeedGeneratedAt: meta.FeedGeneratedAt,
+				DatasetLabel: release.Version, SnapshotID: snapshot, AllowedItems: allowed, ProductGroups: release.ProductGroups, ItemFamilies: families, FeedGeneratedAt: meta.FeedGeneratedAt,
 			})
 			if err != nil {
 				return err
@@ -186,8 +193,8 @@ func run(
 				out.FeedGeneratedAt = meta.FeedGeneratedAt.Format(time.RFC3339)
 			}
 		}
-		logger.Info("v4 backtest completed",
-			"sha256", sha,
+		logger.Info("closed backtest completed",
+			"version", release.Version, "sha256", release.SHA,
 			"rows", summary.Rows,
 			"baskets", summary.Baskets,
 			"items", summary.TotalItems,

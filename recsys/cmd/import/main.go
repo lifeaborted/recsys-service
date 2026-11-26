@@ -52,7 +52,8 @@ func main() {
 	checkAnon := flag.Bool("check-anonymization", false, "проверить пороги обезличивания (>=3 покупателей, >=5 физлиц для B2C)")
 	dryRun := flag.Bool("dry-run", false, "проверить CSV и сформировать партии без записи в PostgreSQL")
 	verifyV4 := flag.Bool("verify-v4", false, "проверить закрытую БД v4 (recommendations.dataset_release, sales, clients)")
-	workbookSHA := flag.String("workbook-sha256", "", "SHA-256 of the source workbook for v4 publication")
+	verifyV5 := flag.Bool("verify-v5", false, "проверить закрытую БД v5, включая product_group")
+	workbookSHA := flag.String("workbook-sha256", "", "SHA-256 of the source workbook for v4/v5 publication")
 	flag.Parse()
 
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, nil))
@@ -67,6 +68,7 @@ func main() {
 		checkAnon:   *checkAnon,
 		dryRun:      *dryRun,
 		verifyV4:    *verifyV4,
+		verifyV5:    *verifyV5,
 		workbookSHA: *workbookSHA,
 	}); err != nil {
 		logger.Error("import failed", "error", err)
@@ -84,14 +86,21 @@ type options struct {
 	checkAnon   bool
 	dryRun      bool
 	verifyV4    bool
+	verifyV5    bool
 }
 
 func run(ctx context.Context, logger *slog.Logger, opts options) error {
+	if opts.verifyV4 && opts.verifyV5 {
+		return errors.New("выберите один релиз для проверки")
+	}
 	if opts.verifyV4 {
-		return verifyClosedV4(ctx, logger)
+		return verifyClosed(ctx, logger, "v4")
+	}
+	if opts.verifyV5 {
+		return verifyClosed(ctx, logger, "v5")
 	}
 	if opts.clientsPath == "" || opts.salesPath == "" {
-		return errors.New("укажите -clients и -sales для CSV-импорта или -verify-v4 для проверки закрытой базы")
+		return errors.New("укажите -clients и -sales для CSV-импорта или -verify-v4 / -verify-v5 для проверки закрытой базы")
 	}
 
 	ds, err := data.LoadCSV(ctx, opts.clientsPath, opts.salesPath)
@@ -110,10 +119,10 @@ func run(ctx context.Context, logger *slog.Logger, opts options) error {
 	mode := "dry-run"
 	if !opts.dryRun {
 		digest := strings.ToLower(strings.TrimSpace(opts.workbookSHA))
-		if digest != "" || opts.version == "v4" {
+		if digest != "" || opts.version == "v4" || opts.version == "v5" {
 			raw, err := hex.DecodeString(digest)
 			if err != nil || len(raw) != 32 {
-				return fmt.Errorf("publishing v4 requires a valid -workbook-sha256")
+				return fmt.Errorf("publishing %s requires a valid -workbook-sha256", opts.version)
 			}
 		}
 		dsn, err := data.ResolveDatabaseURL()
@@ -163,12 +172,12 @@ func run(ctx context.Context, logger *slog.Logger, opts options) error {
 	return nil
 }
 
-func verifyClosedV4(ctx context.Context, logger *slog.Logger) error {
+func verifyClosed(ctx context.Context, logger *slog.Logger, version string) error {
 	dsn, err := data.ResolveDatabaseURL()
 	if err != nil {
 		return err
 	}
-	logger.Info("verifying closed v4 release", "dsn", data.MaskDSN(dsn))
+	logger.Info("verifying closed release", "version", version, "dsn", data.MaskDSN(dsn))
 
 	store, err := postgres.Open(dsn)
 	if err != nil {
@@ -176,17 +185,17 @@ func verifyClosedV4(ctx context.Context, logger *slog.Logger) error {
 	}
 	defer store.Close()
 
-	sha, sales, err := store.EvaluationV4(ctx)
+	release, err := store.EvaluationDataset(ctx, version)
 	if err != nil {
-		return fmt.Errorf("прочитать закрытую базу v4: %w", err)
+		return fmt.Errorf("прочитать закрытую базу %s: %w", version, err)
 	}
-	summary, anon, err := eval.VerifyV4Evaluation(sha, sales)
+	summary, anon, err := eval.VerifyClosedEvaluation(version, release.SHA, release.Sales, release.ProductGroups)
 	if err != nil {
 		return err
 	}
 
-	logger.Info("closed v4 release verified",
-		"sha256", sha,
+	logger.Info("closed release verified",
+		"version", version, "sha256", release.SHA, "product_groups", summary.ProductGroups,
 		"rows", summary.Rows,
 		"clients", summary.UniqueClients,
 		"baskets", summary.Baskets,
@@ -196,8 +205,8 @@ func verifyClosedV4(ctx context.Context, logger *slog.Logger) error {
 		"min_buyers", anon.MinItemBuyers,
 		"min_b2c_buyers", anon.MinB2CBuyers,
 	)
-	fmt.Printf("v4 verified: sha256=%s rows=%d clients=%d baskets=%d items=%d train_items=%d cold_items=%d min_buyers=%d min_b2c_buyers=%d\n",
-		sha, summary.Rows, summary.UniqueClients, summary.Baskets, summary.TotalItems,
+	fmt.Printf("%s verified: sha256=%s rows=%d clients=%d baskets=%d items=%d train_items=%d cold_items=%d min_buyers=%d min_b2c_buyers=%d\n",
+		version, release.SHA, summary.Rows, summary.UniqueClients, summary.Baskets, summary.TotalItems,
 		summary.TrainItems, len(summary.ColdItems), anon.MinItemBuyers, anon.MinB2CBuyers)
 	return nil
 }

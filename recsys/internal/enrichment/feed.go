@@ -63,6 +63,7 @@ var parameterNames = map[string]string{
 	"license type": "license_type", "тип лицензии": "license_type",
 	"seats": "seats", "места": "seats",
 	"term": "term", "срок": "term", "срок действия": "term",
+	"пользователь": "user_type", "тип организации": "organization_type",
 }
 
 // ReadFeed visits offers in source order. Publish the resulting batch only after it returns nil.
@@ -150,7 +151,7 @@ func ReadFeed(r io.Reader, version, sourceURL string, location *time.Location, v
 func (raw feedOffer) normalize(feed FeedVersion) (Offer, error) {
 	values := map[string]string{
 		"category": raw.Category, "available": raw.Available, "vendor": raw.Vendor,
-		"family": "", "edition": "", "platform": "", "license_type": "", "seats": "", "term": "",
+		"family": "", "edition": "", "platform": "", "license_type": "", "seats": "", "term": "", "user_type": "", "organization_type": "",
 	}
 	units := make(map[string]string)
 	available := strings.TrimSpace(raw.Available)

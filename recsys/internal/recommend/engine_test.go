@@ -183,3 +183,18 @@ func TestRefillAfterFilters(t *testing.T) {
 		t.Fatalf("refill: %+v %v", r.Items, err)
 	}
 }
+
+func TestOrganizationRestrictionsApplyOnlyOnline(t *testing.T) {
+	offer := "offer"
+	product := Product{OfferID: &offer, InSales: true, Available: true, Audience: domain.B2B, OrganizationType: "академическая"}
+	generic := domain.Client{Group: domain.B2B, Type: "ЮЛ"}
+	academic := domain.Client{Group: domain.B2B, Type: "Академическая организация"}
+	if eligible(product, generic, nil, contract.Online) || !eligible(product, academic, nil, contract.Online) {
+		t.Fatal("online recommendation must match the confirmed organization type")
+	}
+	product.Available = false
+	product.OfferID = nil
+	if eligible(product, academic, nil, contract.Online) || !eligible(product, generic, nil, contract.Backtest) {
+		t.Fatal("historical pool must not depend on current availability, offer, or organization restrictions")
+	}
+}

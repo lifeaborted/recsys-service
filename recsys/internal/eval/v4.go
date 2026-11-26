@@ -31,15 +31,28 @@ func CheckEvalAnonymization(sales []Sale) (data.AnonymizationReport, error) {
 
 // VerifyV4Evaluation validates closed v4 release metadata, expected dimensions, and anonymization thresholds.
 func VerifyV4Evaluation(sha string, sales []Sale) (DatasetSummary, data.AnonymizationReport, error) {
-	summary := SummarizeDataset(sales)
-	if err := data.VerifyV4Release(data.ExpectedV4Version, sha, summary.Rows, summary.TotalItems); err != nil {
+	return VerifyClosedEvaluation("v4", sha, sales, nil)
+}
+
+func VerifyClosedEvaluation(version, sha string, sales []Sale, groups map[domain.ItemID]string) (DatasetSummary, data.AnonymizationReport, error) {
+	summary := SummarizeDatasetWithGroups(sales, ProductGroupStrings(groups))
+	var err error
+	switch version {
+	case data.ExpectedV4Version:
+		err = data.VerifyV4Release(version, sha, summary.Rows, summary.TotalItems)
+	case data.ExpectedV5Version:
+		err = data.VerifyV5Release(version, sha, summary.Rows, summary.TotalItems, summary.ProductGroups)
+	default:
+		err = fmt.Errorf("unsupported closed dataset %q", version)
+	}
+	if err != nil {
 		return summary, data.AnonymizationReport{}, err
 	}
 	if summary.Baskets != data.ExpectedV4Baskets ||
 		summary.TrainItems != data.ExpectedV4TrainItems ||
 		len(summary.ColdItems) != data.ExpectedV4ColdItems {
 		return summary, data.AnonymizationReport{}, fmt.Errorf(
-			"unexpected v4 split counts: baskets=%d train_items=%d cold_items=%d (want %d/%d/%d)",
+			"unexpected closed dataset split counts: baskets=%d train_items=%d cold_items=%d (want %d/%d/%d)",
 			summary.Baskets, summary.TrainItems, len(summary.ColdItems),
 			data.ExpectedV4Baskets, data.ExpectedV4TrainItems, data.ExpectedV4ColdItems,
 		)

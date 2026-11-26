@@ -132,7 +132,7 @@ func EvaluateRecommender(
 	if err != nil {
 		return HybridReport{}, err
 	}
-	summary := SummarizeDataset(evalSales)
+	summary := SummarizeDatasetWithGroups(evalSales, ProductGroupStrings(cfg.ProductGroups))
 
 	groups := make(map[string]string, len(clients))
 	for _, c := range clients {
@@ -274,6 +274,9 @@ func EvaluateRecommender(
 
 	for i := range results {
 		sliceRes := &results[i]
+		sliceRes.Metrics.VariantHits = sliceRes.Families.KnownFamilyHits
+		sliceRes.Metrics.NewProductHits = sliceRes.Families.NewFamilyHits
+		sliceRes.Metrics.VariantShare = sliceRes.Families.KnownFamilyShare()
 		if sliceRes.Clients > 0 {
 			sliceRes.Metrics.Precision *= 100 / (TopK * float64(sliceRes.Clients))
 			sliceRes.Metrics.FillRate *= 100 / float64(sliceRes.Clients)
