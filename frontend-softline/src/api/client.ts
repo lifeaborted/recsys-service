@@ -239,3 +239,88 @@ export async function checkHealth(config: RecsysConfig): Promise<HealthResponse>
   }
   return { status: "ok" };
 }
+
+export interface DbStats {
+  status: string;
+  model_version?: string;
+  tables: Record<string, number>;
+}
+
+export interface RunInfo {
+  run_id: number;
+  model_version: string;
+  requested_at: string;
+  items: RecommendationItem[];
+  clicks: number;
+  purchases: number;
+}
+
+export interface NewRunResponse {
+  run_id: number;
+  client_id: string;
+  count: number;
+  items: RecommendationItem[];
+}
+
+export async function fetchDbStats(config: RecsysConfig): Promise<DbStats> {
+  const payload = await request<unknown>(config, "/debug/stats", { method: "GET" });
+  if (!isRecord(payload)) throw new RecsysError("Ответ /debug/stats не является объектом");
+  const tables: Record<string, number> = {};
+  const raw = payload.tables;
+  if (isRecord(raw)) {
+    Object.keys(raw).forEach((key) => {
+      const value = raw[key];
+      if (typeof value === "number") tables[key] = value;
+    });
+  }
+  return {
+    status: asString(payload.status) ?? "ok",
+    model_version: asString(payload.model_version),
+    tables,
+  };
+}
+
+export async function fetchRuns(
+  config: RecsysConfig,
+  userId: string,
+  limit = 10,
+): Promise<{ user_id: string; client_id: string; runs: RunInfo[] }> {
+  const query = new URLSearchParams({ user_id: userId, limit: String(limit) });
+  const payload = await request<unknown>(config, `/debug/runs?${query.toString()}`, { method: "GET" });
+  if (!isRecord(payload)) throw new RecsysError("Ответ /debug/runs не является объектом");
+  const rawRuns = Array.isArray(payload.runs) ? payload.runs : [];
+  return {
+    user_id: userId,
+    client_id: asString(payload.client_id) ?? "—",
+    runs: rawRuns.map((raw, index): RunInfo => {
+      const record = isRecord(raw) ? raw : {};
+      const rawItems = Array.isArray(record.items) ? record.items : [];
+      return {
+        run_id: asNumber(record.run_id) ?? index + 1,
+        model_version: asString(record.model_version) ?? "—",
+        requested_at: asString(record.requested_at) ?? "",
+        items: rawItems.map(normalizeItem),
+        clicks: asNumber(record.clicks) ?? 0,
+        purchases: asNumber(record.purchases) ?? 0,
+      };
+    }),
+  };
+}
+
+export async function createRun(
+  config: RecsysConfig,
+  userId: string,
+): Promise<NewRunResponse> {
+  const query = new URLSearchParams({ user_id: userId });
+  const payload = await request<unknown>(config, `/recommendations/new?${query.toString()}`, {
+    method: "POST",
+  });
+  if (!isRecord(payload)) throw new RecsysError("Ответ /recommendations/new не является объектом");
+  const rawItems = Array.isArray(payload.items) ? payload.items : [];
+  return {
+    run_id: asNumber(payload.run_id) ?? 0,
+    client_id: asString(payload.client_id) ?? "—",
+    count: asNumber(payload.count) ?? rawItems.length,
+    items: rawItems.map(normalizeItem),
+  };
+}

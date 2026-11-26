@@ -21,7 +21,22 @@ npm run build
 npm run preview    # http://localhost:4173
 ```
 
-По умолчанию включён **mock-режим** — сервер БД не нужен.
+По умолчанию фронтенд работает в **live-режиме** и ходит на Go API из
+`../bd-for-test/cmd/api` (порт 8000 через прокси Vite). Mock-режим можно включить в **Профиле**.
+
+БД и API лежат отдельно — в `E:\github-project\recsys-service\bd-for-test`:
+
+```bash
+cd ../bd-for-test
+go run ./cmd/migration up    # схема (создаст БД recsys при необходимости)
+go run ./cmd/migration seed  # демо-данные, если полный дамп ещё не залит
+go run ./cmd/api             # REST API на :8000
+```
+
+Подробности — в `bd-for-test/README.md`. Страница **«Тест рекомендаций»**
+(`#/recommendations`, ссылка в боковом меню) показывает счётчики БД, выдачу,
+кнопки `click`/`purchase`, создание нового run и историю run'ов. Полный дамп на
+260 тыс. строк можно залить командой `cd ../bd-for-test && go run ./cmd/import -truncate`.
 
 ## Что где лежит
 
@@ -54,7 +69,7 @@ src/styles/clone.css       дополнения к исходному CSS
 3. Плавающая кнопка **«⚙ Тест рекомендаций»** показывает: запрос, ответ, ошибку,
    таблицу score/причин, режим (mock/live), время отклика и историю вызовов.
    Кнопка «Score» включает оценку и объяснение прямо на карточках.
-4. Клик по карточке отправляет `POST /feedback` (в mock — просто в консоль).
+4. Клик по карточке отправляет `POST /feedback` — Go API пишет событие в `recommendation_events`.
 
 ### Контракт API
 

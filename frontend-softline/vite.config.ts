@@ -10,6 +10,8 @@ export default defineConfig(({ mode }) => {
     plugins: [react()],
     server: {
       port: 5173,
+      // Дамп БД лежит в ../bd-for-test — следить за ним не нужно.
+      watch: { ignored: ["**/bd-for-test/**", "**/bd/**"] },
       proxy: {
         "/api": {
           target,
