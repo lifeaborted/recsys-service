@@ -1,0 +1,27 @@
+# Environment & credentials
+.env
+.env.*
+*.env
+!.env.example
+!**/.env.example
+
+# Database dumps & private datasets
+recommendations*.sql
+*.sql.gz
+*.dump
+*.pgdump
+*.bak
+*.db
+*.sqlite
+*.sqlite3
+*.xlsx
+*.yml.gz
+
+# Editor & IDE directories
+.obsidian/
+.idea/
+.vscode/
+
+# Build artifacts
+*.exe
+/bin/

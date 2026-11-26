@@ -1,0 +1,22 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_USER: ${E2E_PG_USER:-recsys_test}
+      POSTGRES_PASSWORD: ${E2E_PG_PASSWORD:-recsys_test_secret}
+      POSTGRES_DB: ${E2E_PG_DB:-recsys_e2e}
+    ports:
+      - "127.0.0.1:${E2E_PG_PORT:-0}:5432"
+    tmpfs:
+      - /var/lib/postgresql/data:rw,size=256m
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+    networks:
+      - e2e_net
+
+networks:
+  e2e_net:
+    driver: bridge

@@ -1,11 +1,16 @@
 .env
 .env.*
+*.env
 !.env.example
 /bin/
 /input/
 /private/
 *.exe
 *.dump
+*.pgdump
+*.db
+*.sqlite
+*.sqlite3
 *.xlsx
 *.yml.gz
-recommendations.sql
+recommendations*.sql
