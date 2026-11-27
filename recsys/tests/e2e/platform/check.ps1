@@ -29,13 +29,17 @@ $runId = [Guid]::NewGuid().ToString("N").Substring(0, 8)
 $projectName = "recsys-platform-e2e-$runId"
 $pgPort = Get-FreeTcpPort
 $apiPort = Get-FreeTcpPort
+$grpcPort = Get-FreeTcpPort
 $pgUser = "e2e_user_$runId"
 $pgPass = "e2e_pass_$runId"
 $pgDb = "recsys_e2e_$runId"
 $pgTxDb = "recsys_tx_$runId"
 
 # Scrub any ambient DB env vars so we NEVER touch a working/production database.
-foreach ($name in @("DATABASE_URL", "RECSYS_DATABASE_URL", "RECSYS_ENV_FILE", "HOST", "PORT", "USER", "PASSWORD", "DATABASE", "DATADASE", "SSLMODE")) {
+foreach ($name in @(
+    "DATABASE_URL", "RECSYS_DATABASE_URL", "RECSYS_ENV_FILE", "HOST", "PORT", "USER", "PASSWORD", "DATABASE", "DATADASE", "SSLMODE",
+    "RECSYS_GRPC_CERT_FILE", "RECSYS_GRPC_KEY_FILE", "RECSYS_GRPC_CA_FILE", "LLM_BASE_URL", "LLM_API_KEY", "LLM_MODEL"
+)) {
     Remove-Item "Env:$name" -ErrorAction SilentlyContinue
 }
 
@@ -51,6 +55,7 @@ docker info --format '{{.ServerVersion}}' | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "Docker daemon is not running or unreachable" }
 
 $apiProcess = $null
+$recommendProcess = $null
 $tempBinDir = Join-Path ([System.IO.Path]::GetTempPath()) "recsys-e2e-bin-$runId"
 New-Item -ItemType Directory -Path $tempBinDir -Force | Out-Null
 
@@ -121,7 +126,34 @@ SELECT json_build_object(
     if ($LASTEXITCODE -ne 0) { throw "PostgreSQL adapter integration tests failed" }
     Remove-Item Env:RECSYS_TEST_DATABASE_URL -ErrorAction SilentlyContinue
 
-    # Build and launch cmd/api against the seeded ephemeral DB.
+    # Launch the recommendation service against the seeded ephemeral DB.
+    $env:DATABASE_URL = $e2eDsn
+    $env:RECSYS_GRPC_ADDR = "127.0.0.1:$grpcPort"
+    $env:RECSYS_GRPC_TARGET = $env:RECSYS_GRPC_ADDR
+    $recommendExe = Join-Path $tempBinDir "recsys-recommend.exe"
+    go build -o $recommendExe ./cmd/recommend
+    if ($LASTEXITCODE -ne 0) { throw "Failed to build cmd/recommend" }
+
+    $recommendStart = @{ FilePath = $recommendExe; WorkingDirectory = $recsysRoot; PassThru = $true }
+    if ($IsWindows) { $recommendStart.WindowStyle = "Hidden" }
+    $recommendProcess = Start-Process @recommendStart
+    $ready = $false
+    for ($i = 0; $i -lt 30; $i++) {
+        if ($recommendProcess.HasExited) { throw "Recommendation service stopped during startup" }
+        $probe = [System.Net.Sockets.TcpClient]::new()
+        try {
+            $probe.Connect("127.0.0.1", $grpcPort)
+            $ready = $true
+            break
+        } catch [System.Net.Sockets.SocketException] {
+            Start-Sleep -Milliseconds 300
+        } finally {
+            $probe.Dispose()
+        }
+    }
+    if (-not $ready) { throw "Recommendation service did not start on $env:RECSYS_GRPC_ADDR" }
+
+    # Launch the HTTP API with the gRPC service as its recommendation dependency.
     $apiExe = Join-Path $tempBinDir "recsys-api.exe"
     go build -o $apiExe ./cmd/api
     if ($LASTEXITCODE -ne 0) { throw "Failed to build cmd/api" }
@@ -152,11 +184,14 @@ SELECT json_build_object(
     if ($LASTEXITCODE -ne 0) { throw "HTTP integration failed" }
     $p2Purchases = (docker compose -f $composeFile -p $projectName exec -T postgres psql -U $pgUser -d $pgDb -tAc "SELECT count(*) FROM recommendations.online_purchases WHERE client_id = 'DEMO-NEW';").Trim()
     if ($p2Purchases -ne "0") { throw "Second profile recorded unexpected purchases" }
-    Write-Host "[check] SUCCESS: PG17 extensions, two seed passes, transactions and HTTP verified (snapshot=demo-v1)."
+    Write-Host "[check] SUCCESS: PG17 extensions, two seed passes, transactions and HTTP → gRPC verified (snapshot=demo-v1)."
 
 } finally {
     if ($null -ne $apiProcess -and -not $apiProcess.HasExited) {
         Stop-Process -Id $apiProcess.Id -Force -ErrorAction SilentlyContinue
+    }
+    if ($null -ne $recommendProcess -and -not $recommendProcess.HasExited) {
+        Stop-Process -Id $recommendProcess.Id -Force -ErrorAction SilentlyContinue
     }
     if (Test-Path $tempBinDir) {
         $resolved = (Resolve-Path -LiteralPath $tempBinDir).Path

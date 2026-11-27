@@ -51,7 +51,8 @@ Git CLI в окружении отсутствует, поэтому номер 
 ```sh
 cd recsys
 $env:RECSYS_ENV_FILE='.env'   # или задайте DATABASE_URL
-go run ./cmd/api              # :8080, /api/v1/*
+go run ./cmd/recommend        # :50051, gRPC (отдельный терминал)
+go run ./cmd/api              # :8080, /api/v1/* (отдельный терминал)
 ```
 
 ## Фактические результаты

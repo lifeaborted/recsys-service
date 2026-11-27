@@ -8,12 +8,19 @@ Go 1.26, Node.js 22+, PostgreSQL 17 и pgx. Команды выполняютс�
 make up
 $env:DATABASE_URL = 'postgres://recsys_dev:recsys_dev@127.0.0.1:55432/recsys_dev?sslmode=disable'
 make seed
+make run-recommend
+```
+
+Во втором терминале из `recsys` задайте ту же строку подключения и запустите HTTP API.
+
+```powershell
+$env:DATABASE_URL = 'postgres://recsys_dev:recsys_dev@127.0.0.1:55432/recsys_dev?sslmode=disable'
 make run
 ```
 
 `make up` поднимает dev PostgreSQL с `pg_trgm` и `vector`. `make down` останавливает Compose и сохраняет том. `make seed` применяет миграции и загружает синтетику с `snapshot_id=demo-v1`. Повтор seed на синтетической БД идемпотентен. Порт API по умолчанию 8080. При использовании `RECSYS_DEV_PG_PORT` укажите этот же порт в `DATABASE_URL`. `make swagger` получает спецификацию запущенного API, интерфейс доступен на [Swagger UI](http://127.0.0.1:8080/swagger/).
 
-Во втором терминале запустите `npm ci` и `npm run dev` из `frontend-softline`. Откройте `http://localhost:5173/#/demo`, выберите HTTP и профиль. Сценарий покупки и браузерные команды есть в [инструкции демо](docs/demo/README.md).
+В третьем терминале запустите `npm ci` и `npm run dev` из `frontend-softline`. Откройте `http://localhost:5173/#/demo`, выберите HTTP и профиль. Сценарий покупки и браузерные команды есть в [инструкции демо](docs/demo/README.md).
 
 Материалы демо:
 
@@ -22,6 +29,23 @@ make run
 - Лицензии и версии зависимостей — [THIRD_PARTY.md](THIRD_PARTY.md).
 - Офлайн- и онлайн-смета — [docs/demo/cost.md](docs/demo/cost.md).
 - Сценарий ролика и список кадров — [docs/demo/video.md](docs/demo/video.md).
+
+## gRPC для других систем
+
+Контракт — [recommendation.proto](api/recommendation/v1/recommendation.proto). Вызов `recsys.recommendation.v1.RecommendationService/GetRecommendations` принимает `client_id` из базы рекомендаций и необязательный лимит от 1 до 36. Без лимита сервис использует 36. Ответ содержит ID активного снимка, карточки и граф объяснений. Пустой ID и некорректный лимит дают `INVALID_ARGUMENT`. Для неизвестного клиента или отсутствующего активного снимка сервис возвращает `NOT_FOUND`.
+
+Проверка на синтетической базе из `recsys` через `grpcurl`.
+
+```powershell
+'{"clientId":"DEMO-BUYER","limit":3}' |
+  grpcurl -plaintext -import-path . -proto api/recommendation/v1/recommendation.proto -d '@' 127.0.0.1:50051 recsys.recommendation.v1.RecommendationService/GetRecommendations
+```
+
+По умолчанию сервис слушает `127.0.0.1:50051` (`RECSYS_GRPC_ADDR`), а HTTP API подключается к тому же адресу (`RECSYS_GRPC_TARGET`). Для подключения между хостами задайте интерфейс сервиса в `RECSYS_GRPC_ADDR` (например, `0.0.0.0:50051`), сетевой адрес сервиса в `RECSYS_GRPC_TARGET` и настройте mTLS. В каждом Go-процессе задайте `RECSYS_GRPC_CERT_FILE`, `RECSYS_GRPC_KEY_FILE` и `RECSYS_GRPC_CA_FILE` с его собственным сертификатом, ключом и доверенным CA. Имя в адресе клиента должно совпадать с SAN серверного сертификата. Системы с доверенным клиентским сертификатом получают доступ к выдаче по переданному ID. Проверку прав пользователя на этот ID выполняет вызывающая система. HTTP API определяет ID по своей сессии.
+
+Для проверки процесса доступен стандартный `grpc.health.v1.Health/Check`. `RECSYS_REQUEST_TIMEOUT` ограничивает длительность обработки. Параметры необязательной LLM для переранжирования задаются процессу `cmd/recommend`. Офлайн-бэктест запускается через `cmd/backtest`.
+
+Go-стабы уже лежат в репозитории. После изменения контракта запустите `make generate-proto` с `protoc` 36.2 и установленными в `PATH` плагинами `protoc-gen-go` v1.36.12 и `protoc-gen-go-grpc` v1.6.2.
 
 ## Офлайн-публикация
 

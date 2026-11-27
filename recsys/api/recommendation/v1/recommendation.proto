@@ -1,0 +1,81 @@
+syntax = "proto3";
+
+package recsys.recommendation.v1;
+
+option go_package = "recsys/api/recommendation/v1;recommendationv1";
+
+import "google/protobuf/struct.proto";
+
+service RecommendationService {
+  // Returns online recommendations from the active snapshot.
+  rpc GetRecommendations(GetRecommendationsRequest) returns (GetRecommendationsResponse);
+}
+
+message GetRecommendationsRequest {
+  // Canonical client ID in the recommendation database. The caller authorizes its use.
+  string client_id = 1;
+  // 0 uses the default (36). An explicit limit must be between 1 and 36.
+  int32 limit = 2;
+}
+
+message GetRecommendationsResponse {
+  string snapshot_id = 1;
+  repeated Recommendation items = 2;
+  Graph graph = 3;
+  optional string partial_reason = 4;
+}
+
+message Recommendation {
+  string item_id = 1;
+  optional string offer_id = 2;
+  optional string sku = 3;
+  string recommendation_kind = 4;
+  optional string family_id = 5;
+  string title = 6;
+  optional string url = 7;
+  optional double price = 8;
+  optional string currency_code = 9;
+  optional string category = 10;
+  double score = 11;
+  string explanation = 12;
+  repeated Variant variants = 13;
+  repeated string evidence_ids = 14;
+  // Verification status, when supplied by the evidence source.
+  optional string status = 15;
+}
+
+message Variant {
+  string item_id = 1;
+  optional string url = 2;
+  repeated Difference differences = 3;
+}
+
+message Difference {
+  string field = 1;
+  // Explicit null marks an unknown value, such as a missing expiry date.
+  google.protobuf.Value value = 2;
+  string unit = 3;
+  string source = 4;
+}
+
+message Graph {
+  repeated Node nodes = 1;
+  repeated Evidence edges = 2;
+}
+
+message Node {
+  string id = 1;
+  string type = 2;
+  string label = 3;
+}
+
+message Evidence {
+  string id = 1;
+  string from = 2;
+  string to = 3;
+  string type = 4;
+  double weight = 5;
+  string reason = 6;
+  string source = 7;
+  string snapshot_id = 8;
+}

@@ -9,7 +9,7 @@ import (
 
 func cardLimit(mode contract.Mode) int {
 	if mode == contract.Online {
-		return 36
+		return contract.MaxOnlineRecommendations
 	}
 	return 3
 }

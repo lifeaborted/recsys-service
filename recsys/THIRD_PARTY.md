@@ -16,6 +16,8 @@
 
 | Компонент | Версия | Лицензия | Ссылка | Зачем |
 |---|---|---|---|---|
+| `google.golang.org/grpc` | 1.85.0 | Apache-2.0 | https://github.com/grpc/grpc-go | gRPC-сервер рекомендаций и клиент HTTP API. |
+| `google.golang.org/protobuf` | 1.36.12 | BSD-3-Clause | https://github.com/protocolbuffers/protobuf-go | Go-представление контракта и сериализация сообщений. |
 | `github.com/lib/pq` | 1.10.9 | MIT | https://github.com/lib/pq | Дополнительный PostgreSQL-драйвер, используется утилитами и тестами. |
 | `golang.org/x/crypto` | 0.59.0 | BSD-3-Clause | https://pkg.go.dev/golang.org/x/crypto | bcrypt для паролей демо-аккаунтов. |
 | `golang.org/x/sync` | 0.25.0 | BSD-3-Clause | https://pkg.go.dev/golang.org/x/sync | Вспомогательные примитивы синхронизации (косвенно, через pgx). |

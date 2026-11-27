@@ -6,6 +6,8 @@ import (
 	"recsys/internal/domain"
 )
 
+const MaxOnlineRecommendations = 36
+
 type Mode string
 
 const (
@@ -18,7 +20,7 @@ type RecommendationQuery struct {
 	// Empty selects the active snapshot for Online mode. Backtest pins a snapshot.
 	SnapshotID string
 	Mode       Mode
-	// Limit caps the number of online cards; 0 selects the default of 3.
+	// Limit caps the number of online cards; 0 selects MaxOnlineRecommendations.
 	Limit int
 }
 
@@ -34,7 +36,7 @@ type RecommendationResponse struct {
 	RecommendationResult
 }
 
-// Recommender is shared by HTTP and historical evaluation.
+// Recommender is shared by transport adapters and historical evaluation.
 type Recommender interface {
 	Recommend(ctx context.Context, query RecommendationQuery) (RecommendationResult, error)
 }

@@ -1,6 +1,7 @@
 GO ?= go
 NODE ?= node
 PWSH ?= pwsh
+PROTOC ?= protoc
 COMPOSE ?= docker compose
 DEV_COMPOSE = $(COMPOSE) -p recsys-dev -f compose.yml
 RECSYS_DEV_PG_PORT ?= 55432
@@ -9,7 +10,7 @@ DATABASE_URL ?= $(STAND_DATABASE_URL)
 API_URL ?= http://127.0.0.1:8080
 ARGS ?=
 
-.PHONY: up down run seed import enrich embed-catalog build-signals backtest swagger check test-e2e test-unit
+.PHONY: up down run run-recommend generate-proto seed import enrich embed-catalog build-signals backtest swagger check test-e2e test-unit
 
 up:
 	$(DEV_COMPOSE) up -d --wait postgres
@@ -19,6 +20,12 @@ down:
 
 run:
 	$(GO) run -mod=readonly ./cmd/api
+
+run-recommend:
+	$(GO) run -mod=readonly ./cmd/recommend
+
+generate-proto:
+	$(PROTOC) -I . --go_out=. --go_opt=paths=source_relative --go-grpc_out=. --go-grpc_opt=paths=source_relative api/recommendation/v1/recommendation.proto
 
 seed:
 	$(GO) run -mod=readonly ./cmd/seed -migrate $(ARGS)

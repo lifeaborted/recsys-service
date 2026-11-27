@@ -394,6 +394,18 @@ paths:
                 $ref: '#/components/schemas/Error'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '503':
+          description: Recommendation service unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '504':
+          description: Recommendation service timed out
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 components:
   headers:
     XRequestID:

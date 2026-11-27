@@ -17,11 +17,12 @@ import (
 	"recsys/internal/config"
 	"recsys/internal/contract"
 	"recsys/internal/domain"
-	"recsys/internal/explain"
 	"recsys/internal/logger"
-	"recsys/internal/recommend"
 	"recsys/internal/store/postgres"
 	transporthttp "recsys/internal/transport/http"
+	"recsys/internal/transport/recommendgrpc"
+
+	"google.golang.org/grpc"
 )
 
 type pgTransportAdapter struct {
@@ -272,10 +273,17 @@ func main() {
 		defer store.Close()
 
 		adapter := pgTransportAdapter{store: store}
-		engine := recommend.New(store)
-		if os.Getenv("LLM_BASE_URL") != "" && os.Getenv("LLM_MODEL") != "" {
-			engine.UseReranker(explain.ChatFromEnv())
+		creds, err := recommendgrpc.ClientCredentials(cfg.GRPC)
+		if err != nil {
+			log.Error("invalid recommendation gRPC credentials", "error", err)
+			os.Exit(1)
 		}
+		conn, err := grpc.NewClient(cfg.GRPC.Target, grpc.WithTransportCredentials(creds))
+		if err != nil {
+			log.Error("failed to configure recommendation gRPC client", "error", err)
+			os.Exit(1)
+		}
+		defer conn.Close()
 		handler = transporthttp.NewServer(transporthttp.Config{
 			Auth:           auth.NewService(store, auth.WithSessionTTL(cfg.SessionTTL), auth.WithBcryptCost(cfg.BcryptCost)),
 			Health:         adapter,
@@ -286,7 +294,7 @@ func main() {
 			Stats:          adapter,
 			Runs:           store,
 			Purchases:      adapter,
-			Recommender:    engine,
+			Recommender:    recommendgrpc.NewClient(conn),
 			Logger:         log,
 			OpenAPISpec:    openAPISpec,
 			RequestTimeout: cfg.RequestTimeout,

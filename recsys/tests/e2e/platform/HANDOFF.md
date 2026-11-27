@@ -13,7 +13,7 @@
 
 ## 2. Настройки окружения (`.env.example`, `Makefile`)
 
-Все команды запускаются из каталога `recsys/`. Секреты в `.env.example` не хранятся.
+Все команды запускаются из каталога `recsys/`. Переменные для запуска отдельного сервиса рекомендаций и HTTP API приведены в [README](../../../README.md#grpc-для-других-систем). Секреты в `.env.example` не хранятся.
 
 | Переменная | Значение в `.env.example` | Назначение |
 |---|---|---|
@@ -93,4 +93,4 @@ pwsh -NoProfile -File tests/e2e/platform/check.ps1
 ## 4. Точки подключения (`cmd/api/main.go`, `internal/store/postgres`)
 
 - Конструкторы хранилища: `postgres.NewPool(ctx, dsn)`, `postgres.New(pool, opts...)`, `postgres.OpenContext(ctx, dsn, opts...)`.
-- В `cmd/api/main.go` `transporthttp.NewServer` получает `Auth`, `Health`, `Catalog`, `CatalogMeta`, `Purchases` и `Recommender` (`recommend.New(store)`). Поведение `internal/recommend` и фронтенда в этой ветке не изменялось.
+- В `cmd/api/main.go` `transporthttp.NewServer` получает `Auth`, `Health`, `Catalog`, `CatalogMeta`, `Purchases` и `Recommender` (gRPC-клиент). Движок `recommend.New(store)` запускается в `cmd/recommend`. Контракт для других систем находится в [recommendation.proto](../../../api/recommendation/v1/recommendation.proto).

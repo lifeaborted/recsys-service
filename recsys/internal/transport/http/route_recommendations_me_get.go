@@ -8,6 +8,9 @@ import (
 	"recsys/internal/contract"
 	"recsys/internal/domain"
 	"recsys/internal/transport/http/respond"
+
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 func (s *Server) handleGetRecommendationsMe(w http.ResponseWriter, r *http.Request) {
@@ -24,7 +27,7 @@ func (s *Server) handleGetRecommendationsMe(w http.ResponseWriter, r *http.Reque
 	limit := 0
 	if raw := r.URL.Query().Get("limit"); raw != "" {
 		parsed, err := strconv.Atoi(raw)
-		if err != nil || parsed < 1 || parsed > 36 {
+		if err != nil || parsed < 1 || parsed > contract.MaxOnlineRecommendations {
 			respond.Error(w, r, http.StatusBadRequest, "invalid_limit", "limit must be an integer between 1 and 36")
 			return
 		}
@@ -37,7 +40,14 @@ func (s *Server) handleGetRecommendationsMe(w http.ResponseWriter, r *http.Reque
 		Limit:    limit,
 	})
 	if err != nil {
-		respond.Error(w, r, http.StatusInternalServerError, "recommendation_failed", "Failed to compute recommendations")
+		switch status.Code(err) {
+		case codes.Unavailable:
+			respond.Error(w, r, http.StatusServiceUnavailable, "model_unavailable", "Recommendation service unavailable")
+		case codes.DeadlineExceeded:
+			respond.Error(w, r, http.StatusGatewayTimeout, "recommendation_timeout", "Recommendation service timed out")
+		default:
+			respond.Error(w, r, http.StatusInternalServerError, "recommendation_failed", "Failed to compute recommendations")
+		}
 		return
 	}
 
