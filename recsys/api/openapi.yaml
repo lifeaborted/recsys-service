@@ -154,6 +154,15 @@ paths:
         - in: query
           name: limit
           schema: {type: integer, minimum: 1, maximum: 100}
+        - in: query
+          name: offset
+          schema: {type: integer, minimum: 0}
+        - in: query
+          name: q
+          schema: {type: string}
+        - in: query
+          name: with_history
+          schema: {type: boolean}
       responses:
         '200':
           description: Page of catalog products
@@ -164,13 +173,148 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [items]
+                required: [items, total, limit, offset]
                 properties:
                   items:
                     type: array
                     items: {$ref: '#/components/schemas/Product'}
+                  total: {type: integer, minimum: 0}
+                  limit: {type: integer, minimum: 1}
+                  offset: {type: integer, minimum: 0}
         '400':
           description: Invalid limit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /products/{itemID}:
+    get:
+      operationId: getProductDetail
+      parameters:
+        - in: path
+          name: itemID
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: Full catalog card for the item
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/XRequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Product not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /products/{itemID}/score-history:
+    get:
+      operationId: getScoreHistory
+      parameters:
+        - in: path
+          name: itemID
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: Average recommendation score timeline across all users
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/XRequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScoreHistory'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /stats:
+    get:
+      operationId: getStats
+      responses:
+        '200':
+          description: Row counts of the demo database tables
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/XRequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Stats'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /runs:
+    get:
+      operationId: listRuns
+      responses:
+        '200':
+          description: Recent stand runs for the session profile
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/XRequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      operationId: createRun
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewRun'
+      responses:
+        '201':
+          description: Created stand run
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/XRequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Run'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /events:
+    post:
+      operationId: createEvent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FeedbackEvent'
+      responses:
+        '201':
+          description: Feedback event recorded
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/XRequestID'
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [accepted]
+                properties:
+                  accepted: {type: boolean}
+        '400':
+          description: Invalid input
           content:
             application/json:
               schema:
@@ -222,6 +366,10 @@ paths:
   /recommendations/me:
     get:
       operationId: getCurrentRecommendations
+      parameters:
+        - in: query
+          name: limit
+          schema: {type: integer, minimum: 1, maximum: 36}
       responses:
         '200':
           description: Recommendations for the session profile
@@ -275,6 +423,114 @@ components:
           properties:
             code: {type: string}
             message: {type: string}
+    Stats:
+      type: object
+      required: [status, model_version, tables]
+      properties:
+        status: {type: string}
+        model_version: {type: string}
+        tables:
+          type: object
+          additionalProperties: {type: integer, minimum: 0}
+    NewRun:
+      type: object
+      required: [items]
+      properties:
+        model_version: {type: string}
+        items:
+          type: array
+          minItems: 1
+          maxItems: 3
+          items:
+            type: object
+            required: [item_id]
+            properties:
+              item_id: {type: string}
+              offer_id: {type: string}
+              explanation: {type: string}
+              score: {type: number}
+    RunItem:
+      type: object
+      required: [item_id, offer_id, explanation, score]
+      properties:
+        item_id: {type: string}
+        offer_id: {type: string}
+        explanation: {type: string}
+        score: {type: number}
+    Run:
+      type: object
+      required: [run_id, model_version, requested_at, items, clicks, purchases]
+      properties:
+        run_id: {type: integer}
+        client_id: {type: string}
+        model_version: {type: string}
+        requested_at: {type: string, format: date-time}
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/RunItem'}
+        clicks: {type: integer, minimum: 0}
+        purchases: {type: integer, minimum: 0}
+    RunList:
+      type: object
+      required: [user_id, client_id, runs]
+      properties:
+        user_id: {type: string}
+        client_id: {type: string}
+        runs:
+          type: array
+          items: {$ref: '#/components/schemas/Run'}
+    FeedbackEvent:
+      type: object
+      required: [run_id, offer_id, event_type]
+      properties:
+        run_id: {type: integer}
+        offer_id: {type: string}
+        event_type: {type: string, enum: [click, purchase]}
+    ScorePoint:
+      type: object
+      required: [at, score, runs]
+      properties:
+        at: {type: string, format: date-time}
+        score: {type: number}
+        runs: {type: integer, minimum: 0}
+    ScoreHistory:
+      type: object
+      required: [item_id, average, points]
+      properties:
+        item_id: {type: string}
+        average: {type: number}
+        points:
+          type: array
+          items: {$ref: '#/components/schemas/ScorePoint'}
+    ProductDetail:
+      type: object
+      required: [item_id, offer_id, sku, title, category, vendor, available, parameters]
+      properties:
+        item_id: {type: string}
+        offer_id: {type: string}
+        sku: {type: string}
+        title: {type: string}
+        category: {type: string}
+        vendor: {type: string}
+        price: {type: number}
+        old_price: {type: number}
+        currency_code: {type: string}
+        available: {type: boolean}
+        url: {type: string, format: uri}
+        description: {type: string}
+        picture_url: {type: string, format: uri}
+        vendor_url: {type: string, format: uri}
+        delivery: {type: boolean}
+        pickup: {type: boolean}
+        sales_notes: {type: string}
+        parameters:
+          type: array
+          items:
+            type: object
+            required: [name, value]
+            properties:
+              name: {type: string}
+              value: {type: string}
     Product:
       type: object
       required: [item_id, sku, title, category, vendor, available]
@@ -288,6 +544,7 @@ components:
         price: {type: number}
         currency_code: {type: string}
         available: {type: boolean}
+        has_history: {type: boolean}
         url: {type: string, format: uri}
     Recommendations:
       type: object
@@ -317,6 +574,8 @@ components:
         url: {type: string, format: uri}
         price: {type: number}
         currency_code: {type: string}
+        category: {type: string}
+        score: {type: number, minimum: 0, maximum: 1}
         explanation: {type: string}
         variants:
           type: array

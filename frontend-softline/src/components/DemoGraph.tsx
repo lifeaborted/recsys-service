@@ -4,28 +4,60 @@ interface DemoGraphProps {
   item: Recommendation;
   edges: GraphEdge[];
   nodes: GraphNode[];
+  showHead?: boolean;
 }
 
-const WIDTH = 780;
-const BOX_WIDTH = 250;
-const BOX_HEIGHT = 50;
-const LEFT_X = 28;
-const RIGHT_X = WIDTH - BOX_WIDTH - 28;
-const ROW_HEIGHT = 92;
+const WIDTH = 840;
+const BOX_WIDTH = 290;
+const BOX_HEIGHT = 62;
+const LEFT_X = 26;
+const RIGHT_X = WIDTH - BOX_WIDTH - 26;
+const ROW_HEIGHT = 96;
+
+const TYPE_LABELS: Record<string, string> = {
+  transition: "переход",
+  basket: "совместная покупка",
+  jaccard: "похожие товары",
+  popularity: "популярное",
+  catalog: "каталог",
+  renewal: "продление",
+  upgrade: "апгрейд",
+  complement: "дополнение",
+  behavioral: "по истории",
+};
+
+function typeLabel(type: string): string {
+  return TYPE_LABELS[type] ?? type;
+}
 
 function unique(values: string[]): string[] {
   return [...new Set(values)];
 }
 
-function shorten(value: string, limit: number): string {
-  return value.length > limit ? `${value.slice(0, limit - 1)}…` : value;
+function labelLines(value: string, limit = 26): [string, string?] {
+  if (value.length <= limit) return [value];
+  const words = value.split(" ");
+  let first = "";
+  let rest: string[] = [];
+  for (let i = 0; i < words.length; i += 1) {
+    const candidate = first ? `${first} ${words[i]}` : words[i];
+    if (candidate.length > limit && first) {
+      first = first.length > limit ? `${first.slice(0, limit - 1)}…` : first;
+      rest = words.slice(i);
+      break;
+    }
+    first = candidate;
+  }
+  if (!rest.length) return [value.length > limit ? `${value.slice(0, limit - 1)}…` : value];
+  const second = rest.join(" ");
+  return [first, second.length > limit ? `${second.slice(0, limit - 1)}…` : second];
 }
 
 /**
- * Небольшой граф только из тех рёбер, которые API вернул для этой карточки.
- * Никаких товаров «из головы»: узлы и связи берутся из ответа.
+ * Граф только из рёбер, которые API вернул для этой карточки.
+ * Узлы, их ID и подписи приходят из ответа — ничего не придумываем.
  */
-export function DemoGraph({ item, edges, nodes }: DemoGraphProps) {
+export function DemoGraph({ item, edges, nodes, showHead = true }: DemoGraphProps) {
   if (edges.length === 0) {
     return (
       <div className="demo-graph demo-graph_empty">
@@ -38,15 +70,15 @@ export function DemoGraph({ item, edges, nodes }: DemoGraphProps) {
   const left = unique(edges.map((edge) => edge.from));
   const right = unique(edges.map((edge) => edge.to));
   const rows = Math.max(left.length, right.length, 1);
-  const height = Math.max(170, rows * ROW_HEIGHT + 40);
+  const height = rows * ROW_HEIGHT + 18;
   const positions = new Map<string, { x: number; y: number }>();
 
   left.forEach((id, index) => {
-    positions.set(id, { x: LEFT_X, y: 30 + index * ROW_HEIGHT });
+    positions.set(id, { x: LEFT_X, y: 18 + index * ROW_HEIGHT });
   });
   right.forEach((id, index) => {
     if (!positions.has(id)) {
-      positions.set(id, { x: RIGHT_X, y: 30 + index * ROW_HEIGHT });
+      positions.set(id, { x: RIGHT_X, y: 18 + index * ROW_HEIGHT });
     }
   });
 
@@ -54,10 +86,12 @@ export function DemoGraph({ item, edges, nodes }: DemoGraphProps) {
 
   return (
     <div className="demo-graph" role="group" aria-label={`Граф связи: ${item.title}`}>
-      <div className="demo-graph__head">
-        <strong>Граф связи</strong>
-        <span>Только рёбра из ответа API для этой карточки</span>
-      </div>
+      {showHead ? (
+        <div className="demo-graph__head">
+          <strong>Граф связи</strong>
+          <span>Связей: {edges.length} · только рёбра из ответа API</span>
+        </div>
+      ) : null}
       <svg
         className="demo-graph__canvas"
         viewBox={`0 0 ${WIDTH} ${height}`}
@@ -85,25 +119,26 @@ export function DemoGraph({ item, edges, nodes }: DemoGraphProps) {
                 x2={x2}
                 y2={y2}
                 stroke="#a20c33"
-                strokeWidth="1.5"
+                strokeWidth="1.8"
                 markerEnd={`url(#${markerId})`}
               />
               <text
                 x={(x1 + x2) / 2}
-                y={(y1 + y2) / 2 - 10}
+                y={(y1 + y2) / 2 - 9}
                 textAnchor="middle"
                 className="demo-graph__edge-label"
-                stroke="#fafafb"
-                strokeWidth={4}
+                stroke="#ffffff"
+                strokeWidth={5}
                 paintOrder="stroke"
               >
-                {edge.type}
+                {typeLabel(edge.type)}
               </text>
             </g>
           );
         })}
         {[...positions.entries()].map(([id, position]) => {
           const isTarget = id === `item:${item.item_id}`;
+          const lines = labelLines(labels.get(id) ?? id);
           return (
             <g key={id}>
               <rect
@@ -111,16 +146,19 @@ export function DemoGraph({ item, edges, nodes }: DemoGraphProps) {
                 y={position.y}
                 width={BOX_WIDTH}
                 height={BOX_HEIGHT}
-                rx="10"
+                rx="12"
                 className={isTarget ? "demo-graph__node demo-graph__node_target" : "demo-graph__node"}
               />
               <text
                 x={position.x + BOX_WIDTH / 2}
-                y={position.y + BOX_HEIGHT / 2 + 4}
+                y={position.y + BOX_HEIGHT / 2 - (lines[1] ? 6 : 0)}
                 textAnchor="middle"
                 className="demo-graph__node-label"
               >
-                {shorten(labels.get(id) ?? id, 30)}
+                <tspan x={position.x + BOX_WIDTH / 2}>{lines[0]}</tspan>
+                {lines[1] ? (
+                  <tspan x={position.x + BOX_WIDTH / 2} dy="16">{lines[1]}</tspan>
+                ) : null}
               </text>
             </g>
           );
@@ -129,9 +167,18 @@ export function DemoGraph({ item, edges, nodes }: DemoGraphProps) {
       <ul className="demo-graph__edges">
         {edges.map((edge) => (
           <li key={edge.id}>
-            <span>{edge.from} → {edge.to}</span>
-            <span> · {labels.get(edge.from) ?? edge.from} → {labels.get(edge.to) ?? edge.to}</span>
-            <span> · {edge.type} · {edge.reason}</span>
+            <div className="demo-graph__edge-route">
+              <span className="demo-graph__edge-type">{typeLabel(edge.type)}</span>
+              <strong>{labels.get(edge.from) ?? edge.from}</strong>
+              <span aria-hidden="true">→</span>
+              <strong>{labels.get(edge.to) ?? edge.to}</strong>
+            </div>
+            <p className="demo-graph__edge-reason">{edge.reason}</p>
+            <div className="demo-graph__edge-meta">
+              <code>{edge.id}</code>
+              <span>{edge.from} → {edge.to}</span>
+              <span>{edge.source}</span>
+            </div>
           </li>
         ))}
       </ul>

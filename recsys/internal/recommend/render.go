@@ -7,7 +7,18 @@ import (
 	"recsys/internal/domain"
 )
 
-func render(snapshot string, mode contract.Mode, ordered []ranked, cards map[domain.ItemID]Product) contract.RecommendationResult {
+// displayScore maps the engine weight to 0..1 without changing the ordering.
+func displayScore(score float64) float64 {
+	if score <= 0 {
+		return 0
+	}
+	return score / (1 + score)
+}
+
+func render(snapshot string, mode contract.Mode, ordered []ranked, cards map[domain.ItemID]Product, limit int) contract.RecommendationResult {
+	if limit <= 0 {
+		limit = 3
+	}
 	out := contract.RecommendationResult{SnapshotID: snapshot, Items: []domain.Recommendation{}, Graph: domain.Graph{Nodes: []domain.Node{}, Edges: []domain.Evidence{}}}
 	type group struct {
 		family string
@@ -21,7 +32,7 @@ func render(snapshot string, mode contract.Mode, ordered []ranked, cards map[dom
 		grouped := mode == contract.Online && p.FamilyID != "" && p.FamilySource != ""
 		idx, exists := groups[g]
 		if !grouped || !exists {
-			if len(out.Items) == 3 {
+			if len(out.Items) == limit {
 				continue
 			}
 			idx = len(out.Items)
@@ -37,7 +48,11 @@ func render(snapshot string, mode contract.Mode, ordered []ranked, cards map[dom
 			if p.CurrencyCode != nil && *p.CurrencyCode != "" {
 				currency = p.CurrencyCode
 			}
-			out.Items = append(out.Items, domain.Recommendation{ItemID: r.id, Kind: r.kind, OfferID: p.OfferID, SKU: p.SKU, URL: p.URL, Price: p.Price, CurrencyCode: currency, FamilyID: family, Title: title, Explanation: r.proof[0].Reason, Variants: []domain.Variant{}, EvidenceIDs: []string{}})
+			var category *string
+			if p.CategoryName != "" {
+				category = &p.CategoryName
+			}
+			out.Items = append(out.Items, domain.Recommendation{ItemID: r.id, Kind: r.kind, OfferID: p.OfferID, SKU: p.SKU, URL: p.URL, Price: p.Price, CurrencyCode: currency, Category: category, Score: displayScore(r.score), FamilyID: family, Title: title, Explanation: r.proof[0].Reason, Variants: []domain.Variant{}, EvidenceIDs: []string{}})
 			if grouped {
 				groups[g] = idx
 			}

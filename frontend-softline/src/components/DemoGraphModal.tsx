@@ -11,7 +11,7 @@ interface DemoGraphModalProps {
 
 /**
  * Отдельное окно для графа: на карточке схема была слишком мелкой.
- * Закрывается кнопкой, кликом по фону и Escape.
+ * Закрывается кнопкой × в углу, кликом по фону и Escape.
  */
 export function DemoGraphModal({ item, edges, nodes, onClose }: DemoGraphModalProps) {
   useEffect(() => {
@@ -44,17 +44,15 @@ export function DemoGraphModal({ item, edges, nodes, onClose }: DemoGraphModalPr
         <div className="demo-modal__head">
           <div>
             <h2 id="demo-graph-modal-title">Граф связи</h2>
-            <p className="demo-modal__subtitle">{item.title} · {item.item_id}</p>
+            <p className="demo-modal__subtitle">
+              {item.title} · {item.item_id} · Esc или клик по фону — закрыть
+            </p>
           </div>
           <button className="demo-modal__close" type="button" aria-label="Закрыть граф" onClick={onClose}>
             ×
           </button>
         </div>
-        <DemoGraph item={item} edges={edges} nodes={nodes} />
-        <div className="demo-modal__foot">
-          <span>Все узлы и рёбра взяты из ответа API для этой карточки.</span>
-          <button className="clone-link-btn" type="button" onClick={onClose}>Закрыть</button>
-        </div>
+        <DemoGraph item={item} edges={edges} nodes={nodes} showHead={false} />
       </div>
     </div>
   );

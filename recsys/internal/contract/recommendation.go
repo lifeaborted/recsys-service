@@ -18,6 +18,8 @@ type RecommendationQuery struct {
 	// Empty selects the active snapshot for Online mode. Backtest pins a snapshot.
 	SnapshotID string
 	Mode       Mode
+	// Limit caps the number of online cards; 0 selects the default of 3.
+	Limit int
 }
 
 type RecommendationResult struct {

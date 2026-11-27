@@ -147,7 +147,6 @@ export function applyLiveScenario(
   const items = response.items
     .map((item) => ({
       ...item,
-      score: Math.round((0.35 + random() * 0.65) * 1000) / 1000,
       reason: reasons[Math.floor(random() * reasons.length)] ?? item.reason,
     }))
     .sort((left, right) => right.score - left.score)

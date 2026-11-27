@@ -62,6 +62,8 @@ type Recommendation struct {
 	URL          *string            `json:"url,omitempty"`
 	Price        *float64           `json:"price,omitempty"`
 	CurrencyCode *string            `json:"currency_code,omitempty"`
+	Category     *string            `json:"category,omitempty"`
+	Score        float64            `json:"score"`
 	Explanation  string             `json:"explanation"`
 	Variants     []Variant          `json:"variants"`
 	EvidenceIDs  []string           `json:"evidence_ids"`

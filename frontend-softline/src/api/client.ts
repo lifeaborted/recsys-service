@@ -2,7 +2,9 @@ import type {
   FeedbackPayload,
   FeedbackResponse,
   HealthResponse,
+  ProductDetail,
   RecommendationItem,
+  ScoreHistory,
   RecommendationResponse,
 } from "./types";
 
@@ -32,6 +34,12 @@ function asString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value : undefined;
 }
 
+function textValue(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+}
+
 function asNumber(value: unknown): number | undefined {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string" && value.trim() && Number.isFinite(Number(value))) {
@@ -51,13 +59,15 @@ function normalizeItem(raw: unknown, index: number): RecommendationItem {
 
   return {
     item_id: asString(raw.item_id) ?? asString(raw.id) ?? `item-${index + 1}`,
+    offer_id: asString(raw.offer_id),
     title: asString(raw.title) ?? asString(raw.name) ?? `Рекомендация ${index + 1}`,
-    subtitle: asString(raw.subtitle) ?? asString(raw.description),
+    subtitle: asString(raw.subtitle) ?? asString(raw.description) ?? asString(raw.vendor),
     category: asString(raw.category),
     score: asNumber(raw.score) ?? 0,
     reason: asString(raw.reason) ?? asString(raw.explanation),
     price: asNumber(raw.price),
     currency: asString(raw.currency) ?? asString(raw.currency_code),
+    hasHistory: raw.has_history === true,
     tags,
     image_url: asString(raw.image_url) ?? asString(raw.image),
     url: asString(raw.url) ?? asString(raw.link),
@@ -232,19 +242,31 @@ export async function sendFeedback(
   config: RecsysConfig,
   feedback: FeedbackPayload,
 ): Promise<FeedbackResponse> {
-  // В текущем OpenAPI нет /feedback: покупка пишется через /purchases.
-  // Клик не имеет отдельного эндпоинта — считаем его принятым локально.
-  if (feedback.action !== "purchase") {
+  if (feedback.action !== "click" && feedback.action !== "purchase") {
     return { accepted: true, mode: "local" };
   }
-  const payload = await request<unknown>(config, "/purchases", {
-    method: "POST",
-    body: JSON.stringify({ item_id: feedback.item_id }),
-  });
-  if (isRecord(payload)) {
-    return { ...payload, accepted: true };
+
+  let result: FeedbackResponse = { accepted: true };
+  if (feedback.run_id && feedback.offer_id) {
+    const event = await request<unknown>(config, "/events", {
+      method: "POST",
+      body: JSON.stringify({
+        run_id: feedback.run_id,
+        offer_id: feedback.offer_id,
+        event_type: feedback.action,
+      }),
+    });
+    result = isRecord(event) ? { ...event, accepted: true } : { accepted: true };
   }
-  return { accepted: true };
+
+  if (feedback.action === "purchase") {
+    const purchase = await request<unknown>(config, "/purchases", {
+      method: "POST",
+      body: JSON.stringify({ item_id: feedback.item_id }),
+    });
+    result = isRecord(purchase) ? { ...purchase, ...result } : result;
+  }
+  return result;
 }
 
 export async function checkHealth(config: RecsysConfig): Promise<HealthResponse> {
@@ -257,6 +279,97 @@ export async function checkHealth(config: RecsysConfig): Promise<HealthResponse>
     };
   }
   return { status: "ok" };
+}
+
+export async function fetchProductDetail(
+  config: RecsysConfig,
+  itemID: string,
+): Promise<ProductDetail> {
+  const payload = await request<unknown>(
+    config,
+    `/products/${encodeURIComponent(itemID)}`,
+    { method: "GET" },
+  );
+  const record = isRecord(payload) ? payload : {};
+  const params = Array.isArray(record.parameters)
+    ? record.parameters.map((entry) => {
+        const item = isRecord(entry) ? entry : {};
+        return { name: asString(item.name) ?? "", value: asString(item.value) ?? textValue(item.value) };
+      })
+    : [];
+  return {
+    item_id: asString(record.item_id) ?? itemID,
+    offer_id: asString(record.offer_id) ?? "",
+    sku: asString(record.sku) ?? "",
+    title: asString(record.title) ?? itemID,
+    category: asString(record.category) ?? "",
+    vendor: asString(record.vendor) ?? "",
+    price: asNumber(record.price),
+    old_price: asNumber(record.old_price),
+    currency_code: asString(record.currency_code) ?? "",
+    available: record.available === true,
+    url: asString(record.url) ?? "",
+    description: asString(record.description) ?? "",
+    picture_url: asString(record.picture_url) ?? "",
+    vendor_url: asString(record.vendor_url) ?? "",
+    delivery: record.delivery === true,
+    pickup: record.pickup === true,
+    sales_notes: asString(record.sales_notes) ?? "",
+    parameters: params,
+  };
+}
+
+export async function fetchScoreHistory(
+  config: RecsysConfig,
+  itemID: string,
+): Promise<ScoreHistory> {
+  const payload = await request<unknown>(
+    config,
+    `/products/${encodeURIComponent(itemID)}/score-history`,
+    { method: "GET" },
+  );
+  const record = isRecord(payload) ? payload : {};
+  const rawPoints = Array.isArray(record.points) ? record.points : [];
+  return {
+    item_id: asString(record.item_id) ?? itemID,
+    average: asNumber(record.average) ?? 0,
+    points: rawPoints.map((entry) => {
+      const point = isRecord(entry) ? entry : {};
+      return {
+        at: asString(point.at) ?? "",
+        score: asNumber(point.score) ?? 0,
+        runs: asNumber(point.runs) ?? 0,
+      };
+    }),
+  };
+}
+
+export interface ProductPage {
+  items: RecommendationItem[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export async function fetchProductsPage(
+  config: RecsysConfig,
+  params: { limit: number; offset: number; q?: string; withHistory?: boolean },
+): Promise<ProductPage> {
+  const query = new URLSearchParams({
+    limit: String(params.limit),
+    offset: String(params.offset),
+  });
+  if (params.q?.trim()) query.set("q", params.q.trim());
+  if (params.withHistory) query.set("with_history", "1");
+  const payload = await request<unknown>(config, `/products?${query.toString()}`, { method: "GET" });
+  const record = isRecord(payload) ? payload : {};
+  const rawItems = Array.isArray(record.items) ? record.items : [];
+  return {
+    items: rawItems.map((item, index) => normalizeItem(item, index)),
+    total: asNumber(record.total) ?? rawItems.length,
+    limit: asNumber(record.limit) ?? params.limit,
+    offset: asNumber(record.offset) ?? params.offset,
+  };
 }
 
 export interface DbStats {
@@ -274,27 +387,51 @@ export interface RunInfo {
   purchases: number;
 }
 
-export interface NewRunResponse {
-  run_id: number;
-  client_id: string;
-  count: number;
-  items: RecommendationItem[];
+export interface NewRunResponse extends RunInfo {
+  client_id?: string;
+}
+
+export interface NewRunItem {
+  item_id: string;
+  offer_id?: string;
+  explanation?: string;
+  score?: number;
+}
+
+function normalizeRun(raw: unknown): RunInfo {
+  const record = isRecord(raw) ? raw : {};
+  const rawItems = Array.isArray(record.items) ? record.items : [];
+  return {
+    run_id: asNumber(record.run_id) ?? 0,
+    model_version: asString(record.model_version) ?? "—",
+    requested_at: asString(record.requested_at) ?? "",
+    clicks: asNumber(record.clicks) ?? 0,
+    purchases: asNumber(record.purchases) ?? 0,
+    items: rawItems.map((item, index) => {
+      const value = isRecord(item) ? item : {};
+      return {
+        item_id: asString(value.item_id) ?? `item-${index + 1}`,
+        offer_id: asString(value.offer_id),
+        title: asString(value.title) ?? asString(value.item_id) ?? `item-${index + 1}`,
+        score: asNumber(value.score) ?? 0,
+        reason: asString(value.explanation),
+      };
+    }),
+  };
 }
 
 export async function fetchDbStats(config: RecsysConfig): Promise<DbStats> {
-  // В текущем OpenAPI нет /debug/stats — считаем доступность по health и каталогу.
-  const [health, products] = await Promise.all([
-    request<unknown>(config, "/health", { method: "GET" }),
-    request<unknown>(config, "/products?limit=1", { method: "GET" }),
-  ]);
-  const h = isRecord(health) ? health : {};
-  const p = isRecord(products) ? products : {};
+  const payload = await request<unknown>(config, "/stats", { method: "GET" });
+  const record = isRecord(payload) ? payload : {};
+  const rawTables = isRecord(record.tables) ? record.tables : {};
   const tables: Record<string, number> = {};
-  const total = asNumber(p.total);
-  if (total !== undefined) tables.catalog_offers = total;
+  for (const [name, value] of Object.entries(rawTables)) {
+    const count = asNumber(value);
+    if (count !== undefined) tables[name] = count;
+  }
   return {
-    status: asString(h.status) ?? "ok",
-    model_version: asString(h.schema_version),
+    status: asString(record.status) ?? "ok",
+    model_version: asString(record.model_version),
     tables,
   };
 }
@@ -302,29 +439,38 @@ export async function fetchDbStats(config: RecsysConfig): Promise<DbStats> {
 export async function fetchRuns(
   config: RecsysConfig,
   _userId: string,
-  _limit = 10,
+  limit = 10,
 ): Promise<{ user_id: string; client_id: string; runs: RunInfo[] }> {
-  // Истории run'ов в публичном API нет — показываем текущий профиль.
-  const payload = await request<unknown>(config, "/users/me", { method: "GET" });
+  const payload = await request<unknown>(config, `/runs?limit=${limit}`, { method: "GET" });
   const record = isRecord(payload) ? payload : {};
+  const rawRuns = Array.isArray(record.runs) ? record.runs : [];
   return {
-    user_id: asString(record.profile_id) ?? "—",
+    user_id: asString(record.user_id) ?? "—",
     client_id: asString(record.client_id) ?? "—",
-    runs: [],
+    runs: rawRuns.map(normalizeRun),
   };
 }
 
 export async function createRun(
   config: RecsysConfig,
-  _userId: string,
+  items: NewRunItem[],
+  modelVersion?: string,
 ): Promise<NewRunResponse> {
-  // Явного пересчёта нет: достаточно обновить выдачу через /recommendations/me.
-  const payload = await request<unknown>(config, "/users/me", { method: "GET" });
+  const payload = await request<unknown>(config, "/runs", {
+    method: "POST",
+    body: JSON.stringify({
+      model_version: modelVersion,
+      items: items.slice(0, 3).map((item) => ({
+        item_id: item.item_id,
+        offer_id: item.offer_id ?? "",
+        explanation: item.explanation ?? "Создано на стенде",
+        score: item.score ?? 0,
+      })),
+    }),
+  });
   const record = isRecord(payload) ? payload : {};
   return {
-    run_id: 0,
-    client_id: asString(record.client_id) ?? "—",
-    count: 0,
-    items: [],
+    ...normalizeRun(payload),
+    client_id: asString(record.client_id),
   };
 }

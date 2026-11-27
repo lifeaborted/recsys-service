@@ -32,7 +32,7 @@ Git CLI в окружении отсутствует, поэтому номер 
 - `src/hooks/useDemoRecommendations.ts` — загрузка, отмена, состояния и `request_id`.
 - `src/components/DemoRecommendationCard.tsx` — карточка с объяснением, ссылкой, вариантами, бейджем проверки и графом.
 - `src/components/DemoGraph.tsx` — граф только по рёбрам ответа API.
-- `src/components/DemoGraphModal.tsx` — модальное окно графа (Escape, фон, «Закрыть»).
+- `src/components/DemoGraphModal.tsx` — модальное окно графа (Escape, фон, кнопка × в углу).
 - `src/components/DemoMetricsPanel.tsx` — таблица A/B, варианты, 55% визитов, дата фида и оговорка.
 - `src/components/DemoQualityChart.tsx` — полосы сравнения A и B под таблицей, без внешних библиотек.
 - `src/pages/DemoPage.tsx`, `src/lib/routes.ts`, `src/App.tsx`, `tools/gen-fragments.mjs` — экран `#/demo` и ссылка в меню.

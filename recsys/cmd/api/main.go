@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sync"
 	"syscall"
 	"time"
 
@@ -36,22 +37,39 @@ func (a pgTransportAdapter) ListProducts(ctx context.Context, limit int) ([]tran
 	if err != nil {
 		return nil, err
 	}
+	return toProductDTOs(rows), nil
+}
+
+func (a pgTransportAdapter) ListProductsPage(ctx context.Context, limit, offset int, query string, withHistory bool) ([]transporthttp.ProductDTO, int64, error) {
+	rows, total, err := a.store.ListProductsPage(ctx, limit, offset, query, withHistory)
+	if err != nil {
+		return nil, 0, err
+	}
+	return toProductDTOs(rows), total, nil
+}
+
+func toProductDTOs(rows []postgres.CatalogProduct) []transporthttp.ProductDTO {
 	out := make([]transporthttp.ProductDTO, len(rows))
 	for i, r := range rows {
 		out[i] = transporthttp.ProductDTO{
-			ItemID:       r.ItemID,
-			OfferID:      r.OfferID,
-			SKU:          r.SKU,
-			Title:        r.Title,
-			Category:     r.Category,
-			Vendor:       r.Vendor,
-			Price:        r.Price,
-			CurrencyCode: r.CurrencyCode,
-			Available:    r.Available,
-			URL:          r.URL,
+			ItemID: r.ItemID, OfferID: r.OfferID, SKU: r.SKU, Title: r.Title,
+			Category: r.Category, Vendor: r.Vendor, Price: r.Price,
+			CurrencyCode: r.CurrencyCode, Available: r.Available, HasHistory: r.HasHistory, URL: r.URL,
 		}
 	}
-	return out, nil
+	return out
+}
+
+func (a pgTransportAdapter) ProductDetail(ctx context.Context, itemID string) (contract.ProductDetail, error) {
+	return a.store.ProductDetail(ctx, itemID)
+}
+
+func (a pgTransportAdapter) ScoreHistory(ctx context.Context, itemID string) (contract.ScoreHistory, error) {
+	return a.store.ScoreHistory(ctx, itemID)
+}
+
+func (a pgTransportAdapter) TableStats(ctx context.Context) (map[string]int64, error) {
+	return a.store.TableStats(ctx)
 }
 
 func (a pgTransportAdapter) CreatePurchase(ctx context.Context, clientID domain.ClientID, rawItemID string, now time.Time) (transporthttp.PurchaseResult, error) {
@@ -69,6 +87,57 @@ func (a pgTransportAdapter) CreatePurchase(ctx context.Context, clientID domain.
 	}, nil
 }
 
+type mockRunsStore struct {
+	mu     sync.Mutex
+	nextID int64
+	runs   []contract.RunRecord
+}
+
+func (m *mockRunsStore) CreateRun(_ context.Context, clientID domain.ClientID, modelVersion string, items []contract.RunItemInput) (contract.RunRecord, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.nextID++
+	run := contract.RunRecord{
+		RunID: m.nextID, ClientID: string(clientID), ModelVersion: modelVersion,
+		RequestedAt: time.Now(), Items: []contract.RunItemRecord{},
+	}
+	for i, item := range items {
+		if i >= 3 {
+			break
+		}
+		run.Items = append(run.Items, contract.RunItemRecord{
+			ItemID: item.ItemID, OfferID: item.OfferID, Explanation: item.Explanation, Score: item.Score,
+		})
+	}
+	m.runs = append([]contract.RunRecord{run}, m.runs...)
+	return run, nil
+}
+
+func (m *mockRunsStore) ListRuns(_ context.Context, _ domain.ClientID, limit int) ([]contract.RunRecord, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if limit > len(m.runs) {
+		limit = len(m.runs)
+	}
+	return append([]contract.RunRecord(nil), m.runs[:limit]...), nil
+}
+
+func (m *mockRunsStore) CreateEvent(_ context.Context, runID int64, _ string, eventType string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for i := range m.runs {
+		if m.runs[i].RunID != runID {
+			continue
+		}
+		if eventType == "click" {
+			m.runs[i].Clicks++
+		} else {
+			m.runs[i].Purchases++
+		}
+	}
+	return nil
+}
+
 type mockBackend struct {
 	examplesDir string
 }
@@ -77,6 +146,30 @@ func (m mockBackend) CheckHealth(_ context.Context) (string, error) { return "mo
 
 func (m mockBackend) ListProducts(_ context.Context, _ int) ([]transporthttp.ProductDTO, error) {
 	return []transporthttp.ProductDTO{}, nil
+}
+
+func (m mockBackend) ListProductsPage(ctx context.Context, limit, offset int, query string, _ bool) ([]transporthttp.ProductDTO, int64, error) {
+	items, err := m.ListProducts(ctx, limit)
+	return items, int64(len(items)), err
+}
+
+func (m mockBackend) ProductDetail(_ context.Context, itemID string) (contract.ProductDetail, error) {
+	return contract.ProductDetail{
+		ItemID: itemID, OfferID: "mock-" + itemID, Title: itemID,
+		Category: "Синтетический пример", Vendor: "Синтетика",
+		Available: true, CurrencyCode: "RUB", Parameters: []contract.Parameter{},
+	}, nil
+}
+
+func (m mockBackend) ScoreHistory(_ context.Context, itemID string) (contract.ScoreHistory, error) {
+	return contract.ScoreHistory{ItemID: itemID, Average: 0.75, Points: []contract.ScorePoint{}}, nil
+}
+
+func (m mockBackend) TableStats(_ context.Context) (map[string]int64, error) {
+	return map[string]int64{
+		"clients": 2, "catalog_offers": 8, "sales": 4,
+		"online_purchases": 0, "recommendation_runs": 0, "recommendation_events": 0,
+	}, nil
 }
 
 func (m mockBackend) CreatePurchase(_ context.Context, _ domain.ClientID, rawItemID string, _ time.Time) (transporthttp.PurchaseResult, error) {
@@ -126,7 +219,11 @@ func main() {
 		httpCfg.Auth = authSvc
 		httpCfg.Health = mb
 		httpCfg.Catalog = mb
+		httpCfg.ProductDetails = mb
+		httpCfg.ScoreHistory = mb
+		httpCfg.Stats = mb
 		httpCfg.Purchases = mb
+		httpCfg.Runs = &mockRunsStore{}
 		httpCfg.Recommender = mb
 	} else {
 		openCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -142,6 +239,10 @@ func main() {
 		httpCfg.Auth = auth.NewService(store, auth.WithSessionTTL(cfg.SessionTTL), auth.WithBcryptCost(cfg.BcryptCost))
 		httpCfg.Health = adapter
 		httpCfg.Catalog = adapter
+		httpCfg.ProductDetails = adapter
+		httpCfg.ScoreHistory = adapter
+		httpCfg.Stats = adapter
+		httpCfg.Runs = store
 		httpCfg.Purchases = adapter
 		// Constructor-injected contract.Recommender (single wiring point for final assembly).
 		engine := recommend.New(store)

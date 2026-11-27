@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import {
+  createRun,
   fetchDbStats,
   fetchRuns,
   RecsysError,
   sendFeedback,
   type DbStats,
+  type NewRunItem,
   type RunInfo,
 } from "../api/client";
 import type { FeedbackPayload, RecommendationItem, Scenario } from "../api/types";
@@ -20,7 +22,7 @@ export function RecommendationsPage() {
   const { settings, update } = useSettings();
   const [stats, setStats] = useState<DbStats | null>(null);
   const [runs, setRuns] = useState<RunInfo[]>([]);
-  const [localRuns, setLocalRuns] = useState<RunInfo[]>([]);
+  const [lastRunID, setLastRunID] = useState<number | null>(null);
   const [clientId, setClientId] = useState("—");
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -68,30 +70,35 @@ export function RecommendationsPage() {
     void loadDb();
   }, [loadDb]);
 
-  const handleNewRun = () => {
+  const handleNewRun = async () => {
     setNotice(null);
     if (settings.mockMode) {
       setNotice("В mock-режиме новый run не создаётся — включите реальный API в Профиле.");
       return;
     }
-    const items = (reco.data?.items ?? []).slice(0, settings.limit);
-    const run: RunInfo = {
-      run_id: Date.now() % 1_000_000,
-      model_version: stats?.model_version ?? "local",
-      requested_at: new Date().toISOString(),
-      items,
-      clicks: 0,
-      purchases: 0,
-    };
-    setLocalRuns((previous) => [run, ...previous]);
-    setNotice(`Создан локальный run #${run.run_id}, товаров: ${items.length}`);
-    reco.refresh();
+    const items: NewRunItem[] = (reco.data?.items ?? []).slice(0, Math.min(3, settings.limit)).map((item) => ({
+      item_id: item.item_id,
+      offer_id: item.offer_id ?? "",
+      explanation: item.reason ?? "Создано на стенде",
+      score: item.score,
+    }));
+    try {
+      const created = await createRun(apiConfig, items, stats?.model_version);
+      setLastRunID(created.run_id);
+      setNotice(`Создан run #${created.run_id} в БД, товаров: ${created.items.length}`);
+      await loadDb();
+      reco.refresh();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Ошибка создания run");
+    }
   };
 
   const handleFeedback = async (item: RecommendationItem, action: "click" | "purchase") => {
     const payload: FeedbackPayload = {
       user_id: settings.userId,
       item_id: item.item_id,
+      offer_id: item.offer_id,
+      run_id: lastRunID ?? runs[0]?.run_id,
       action,
       scenario: settings.scenario,
       request_id: reco.data?.request_id ?? null,
@@ -101,13 +108,7 @@ export function RecommendationsPage() {
     try {
       if (settings.mockMode) await mockFeedback(payload);
       else await sendFeedback(apiConfig, payload);
-      setNotice(`Событие «${action === "click" ? "click" : "purchase"}» записано для ${item.item_id}`);
-      setLocalRuns((previous) => previous.map((run, index) => {
-        if (index !== 0) return run;
-        return action === "click"
-          ? { ...run, clicks: run.clicks + 1 }
-          : { ...run, purchases: run.purchases + 1 };
-      }));
+      setNotice(`Событие «${action === "click" ? "click" : "purchase"}» записано в БД для ${item.item_id}`);
       await loadDb();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Ошибка записи события");
@@ -115,7 +116,6 @@ export function RecommendationsPage() {
   };
 
   const tableCounts = stats?.tables ?? {};
-  const visibleRuns = [...localRuns, ...runs];
 
   return (
     <div className="react-page-inner">
@@ -131,7 +131,7 @@ export function RecommendationsPage() {
           <div className="stat-card__label">режим</div>
         </div>
         <div className="stat-card">
-          <div className="stat-card__value">{stats?.model_version ?? "—"}</div>
+          <div className="stat-card__value" title={stats?.model_version ?? "—"}>{stats?.model_version ?? "—"}</div>
           <div className="stat-card__label">модель</div>
         </div>
         <div className="stat-card">
@@ -187,13 +187,11 @@ export function RecommendationsPage() {
           </div>
           <div className="form-field">
             <label>Лимит</label>
-            <input
-              type="number"
-              min={1}
-              max={50}
-              value={settings.limit}
-              onChange={(event) => update({ limit: Math.max(1, Number(event.target.value) || 1) })}
-            />
+            <select value={settings.limit} onChange={(event) => update({ limit: Number(event.target.value) })}>
+              {[1, 2, 3, 4, 5, 6, 9, 12, 24, 36].map((value) => (
+                <option key={value} value={value}>{value}</option>
+              ))}
+            </select>
           </div>
           <div className="form-field">
             <label>Режим</label>
@@ -215,10 +213,13 @@ export function RecommendationsPage() {
           >
             {reco.status === "loading" ? "Запрос…" : "Запросить выдачу"}
           </button>
+          <button className="button button_default button_size-l" type="button" onClick={reco.refresh}>
+            Применить лимит
+          </button>
           <button
             className="button button_default button_size-l"
             type="button"
-            onClick={handleNewRun}
+            onClick={() => void handleNewRun()}
           >
             Новый run
           </button>
@@ -302,7 +303,7 @@ export function RecommendationsPage() {
             </tr>
           </thead>
           <tbody>
-            {visibleRuns.map((run) => (
+            {runs.map((run) => (
               <tr key={run.run_id}>
                 <td>{run.run_id}</td>
                 <td>{formatDateTime(run.requested_at)}</td>
@@ -316,10 +317,7 @@ export function RecommendationsPage() {
             ))}
           </tbody>
         </table>
-        {!visibleRuns.length ? <div className="reco-empty">Run'ов пока нет — нажмите «Новый run»</div> : null}
-        <p className="form-note">
-          Run'ы создаются локально: в публичном OpenAPI нет отдельного эндпоинта run.
-        </p>
+        {!runs.length ? <div className="reco-empty">Run'ов пока нет — нажмите «Новый run»</div> : null}
       </div>
     </div>
   );

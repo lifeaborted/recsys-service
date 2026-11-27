@@ -143,12 +143,22 @@ export function DemoPage() {
 
         {session.error ? <p role="alert">{session.error}</p> : null}
         {catalog.length ? (
-          <div className="demo-toolbar">
-            <label>Каталог <select value={selectedItem} onChange={(event) => setSelectedItem(event.target.value)}>
-              <option value="">Выберите товар</option>
-              {catalog.map((item) => <option key={item.item_id} value={item.item_id}>{item.title}</option>)}
-            </select></label>
-            <button type="button" disabled={!selectedItem || busy} onClick={() => void buy(selectedItem)}>Купить из каталога</button>
+          <div className="demo-toolbar demo-toolbar_catalog">
+            <label className="demo-catalog-field">
+              <span>Каталог</span>
+              <select value={selectedItem} onChange={(event) => setSelectedItem(event.target.value)}>
+                <option value="">Выберите товар</option>
+                {catalog.map((item) => <option key={item.item_id} value={item.item_id}>{item.title}</option>)}
+              </select>
+            </label>
+            <button
+              className="button button_primary button_size-l"
+              type="button"
+              disabled={!selectedItem || busy}
+              onClick={() => void buy(selectedItem)}
+            >
+              Купить из каталога
+            </button>
           </div>
         ) : null}
         {notice ? <p className="demo-status">{notice}</p> : null}

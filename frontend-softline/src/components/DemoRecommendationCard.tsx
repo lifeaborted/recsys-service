@@ -72,6 +72,13 @@ export function DemoRecommendationCard({ item, edges, onPurchase, onShowGraph, b
         <span className="demo-card__link">Ссылка недоступна</span>
       )}
 
+      <a
+        className="demo-card__detail-link"
+        href={`#/demo-product?item=${encodeURIComponent(item.item_id)}`}
+      >
+        Полная информация о товаре →
+      </a>
+
       {item.variants.length > 0 ? (
         <div className="demo-card__section">
           <button className="clone-link-btn" type="button" onClick={() => setShowVariants((value) => !value)}>
