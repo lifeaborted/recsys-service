@@ -32,7 +32,7 @@ npm run dev
 
 API доступен по адресу `http://127.0.0.1:8080`. Для проверки подключения откройте [health](http://127.0.0.1:8080/api/v1/health). Контракт и интерактивные запросы доступны в [OpenAPI](recsys/api/openapi.yaml) и [Swagger UI](http://127.0.0.1:8080/swagger/). Для нестандартного адреса Go API передайте `VITE_PROXY_RECSYS_TARGET` при запуске Vite. [Подробный сценарий демо](recsys/docs/demo/README.md)
 
-Материалы демо: [метрики](recsys/docs/demo/metrics.json), [сторонние компоненты](recsys/THIRD_PARTY.md), [смета](recsys/docs/demo/cost.md), [сценарий ролика](recsys/docs/demo/video.md).
+Материалы демо: [метрики v5](recsys/tests/e2e/data/public-metrics.json), [сторонние компоненты](recsys/THIRD_PARTY.md), [смета](recsys/docs/demo/cost.md), [сценарий ролика](recsys/docs/demo/video.md).
 
 ## Как устроен проект
 

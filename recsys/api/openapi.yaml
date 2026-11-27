@@ -573,6 +573,7 @@ components:
         item_id: {type: string}
         offer_id: {type: string}
         sku: {type: string, nullable: true}
+        status: {type: string, enum: [confirmed, review], description: Статус проверки связи, если он указан в источнике.}
         recommendation_kind:
           type: string
           enum: [renewal, upgrade, complement, behavioral, popular]

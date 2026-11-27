@@ -1,4 +1,4 @@
-import metrics from "../../../recsys/docs/demo/metrics.json";
+import { demoMetrics as metrics } from "../data/demoMetrics";
 
 type Cohort = "all" | "B2B" | "B2C";
 

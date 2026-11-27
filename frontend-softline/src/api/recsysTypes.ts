@@ -14,7 +14,7 @@ export interface Variant {
   differences: Difference[];
 }
 
-export type VerificationStatus = "confirmed" | "requires_check";
+export type VerificationStatus = "confirmed" | "review";
 
 export interface Recommendation {
   item_id: string;
@@ -31,7 +31,7 @@ export interface Recommendation {
    * Демо-пометка о том, что совместимость подтверждена или требует проверки.
    * Боевой API это поле пока не отдаёт, поэтому оно необязательное.
    */
-  verification?: VerificationStatus;
+  status?: VerificationStatus;
 }
 
 export interface GraphNode {

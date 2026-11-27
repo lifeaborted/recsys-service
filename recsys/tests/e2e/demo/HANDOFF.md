@@ -13,11 +13,11 @@ Git CLI в окружении отсутствует, поэтому номер 
 ## Зона записи в recsys
 
 - `api/examples/recommendations.full.json` — полная выдача, 3 карточки, граф с двумя концами у каждого ребра.
-- `api/examples/recommendations.partial.json` — частичная (`partial_reason`), 1 карточка DEMO-RENEW.
+- `api/examples/recommendations.partial.json` — частичная (`partial_reason`), 1 карточка дополнительного модуля.
 - `api/examples/recommendations.empty.json` — пустая выдача, `items: []`, `partial_reason: null`.
 - `api/examples/recommendations.error.json` — ошибка с `request_id` и `error.code/message`.
-- `api/examples/recommendations.verified.json` — 2 карточки: подтверждённый апгрейд и дополнение со статусом `requires_check`; без продления.
-- `docs/demo/metrics.json` — числа A/B, доля вариантов, 55% визитов, дата фида и оговорка про каталог; `"provisional": true`.
+- `api/examples/recommendations.verified.json` — 2 карточки: подтверждённый апгрейд и дополнение со статусом `review`; без продления.
+- `docs/demo/metrics.json` — числа A/B, доля вариантов, 55% визитов, дата фида и оговорка про каталог; `"fallback": true`.
 - `docs/demo/README.md` — команды, адрес экрана, шаги и ожидаемые надписи.
 - `docs/demo/cost.md`, `docs/demo/video.md` — смета и сценарий ролика.
 - `THIRD_PARTY.md` — версии и лицензии зависимостей.
@@ -67,7 +67,7 @@ tests 10, pass 10, fail 0
 примере; оба конца каждого ребра есть в `graph.nodes`; все `evidence_ids` разрешаются;
 варианты DEMO-RENEW различаются сроками 12 и 24 месяца; неизвестный срок сохранён
 как `null`; ошибка содержит `request_id`. Новый `recommendations.verified.json`:
-две карточки, подтверждённый апгрейд и дополнение с `requires_check`, без продления;
+две карточки, подтверждённый апгрейд и дополнение с `review`, без продления;
 старый пример на три карточки от этого не меняется.
 
 Совместный прогон с API: `node --test tests/e2e/demo/contract.test.mjs tests/e2e/demo/api.test.mjs`

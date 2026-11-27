@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -50,6 +51,9 @@ func assertNoSensitivePublicJSONLeaks(t *testing.T, body string) {
 
 func TestBacktestPublicJSONGoldenCLI(t *testing.T) {
 	bin := filepath.Join(t.TempDir(), "backtest-test-bin")
+	if runtime.GOOS == "windows" {
+		bin += ".exe"
+	}
 	build := exec.Command("go", "build", "-mod=readonly", "-o", bin, ".")
 	if out, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("build cmd/backtest failed: %v\n%s", err, out)

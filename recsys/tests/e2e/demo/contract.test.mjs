@@ -53,7 +53,8 @@ test("примеры читаются и имеют базовую форму", 
     assert.ok(payload.snapshot_id, `${name}: нет snapshot_id`);
     assert.ok(Array.isArray(payload.items), `${name}: items должен быть массивом`);
     assert.ok(payload.graph && Array.isArray(payload.graph.nodes) && Array.isArray(payload.graph.edges));
-    assert.ok(!Object.hasOwn(payload, "items") || payload.items.length <= 3, `${name}: больше трёх карточек`);
+    assert.ok(payload.items.length <= 36, `${name}: больше 36 карточек`);
+    assert.ok(payload.items.every((item) => item.recommendation_kind !== "renewal"), `${name}: продление в онлайне`);
   }
 });
 
@@ -78,27 +79,21 @@ test("пустая выдача представляет пустые списк
   assert.equal(empty.partial_reason, null);
 });
 
-test("четвёртой верхнеуровневой карточки нет ни в одном примере", () => {
-  for (const [name, payload] of Object.entries({ full, partial, empty })) {
-    assert.ok(payload.items.length < 4, `${name}: есть четвёртая карточка`);
-  }
-});
-
-test("DEMO-RENEW показывает два варианта с разными сроками", () => {
-  const item = full.items.find((entry) => entry.item_id === "DEMO-RENEW-12");
-  assert.ok(item, "в полной выдаче нет DEMO-RENEW-12");
-  assert.equal(item.recommendation_kind, "renewal");
+test("DEMO-MODULE показывает два варианта с разными сроками", () => {
+  const item = full.items.find((entry) => entry.item_id === "DEMO-MODULE-12");
+  assert.ok(item, "в полной выдаче нет DEMO-MODULE-12");
+  assert.equal(item.recommendation_kind, "complement");
   assert.equal(item.variants.length, 2);
 
   const terms = item.variants.map((variant) =>
     variant.differences.find((difference) => difference.field === "term")?.value);
   assert.deepEqual(terms.sort((a, b) => a - b), [12, 24]);
   assert.equal(new Set(terms).size, 2, "варианты должны отличаться сроком");
-  assertEdgesResolvable(full, "full-renew");
+  assertEdgesResolvable(full, "full-module");
 });
 
 test("неизвестный срок окончания сохраняется как null", () => {
-  const item = full.items.find((entry) => entry.item_id === "DEMO-RENEW-12");
+  const item = full.items.find((entry) => entry.item_id === "DEMO-MODULE-12");
   const unknown = item.variants.some((variant) =>
     variant.differences.some((difference) => difference.field === "expires_at" && difference.value === null));
   assert.ok(unknown, "состояние «срок неизвестен» потеряно");
@@ -113,15 +108,14 @@ test("ошибка содержит request_id и код", () => {
 
 test("пример с проверкой совместимости отделяет подтверждённое от «требует проверки»", () => {
   assert.equal(verified.items.length, 2);
-  assert.ok(verified.items.length < 4, "в новом примере не должно быть четвёртой карточки");
   assert.equal(verified.partial_reason, null);
   verified.items.forEach((item, index) => assertItemShape(item, `verified.items[${index}]`));
 
-  const confirmed = verified.items.find((item) => item.verification === "confirmed");
-  const requiresCheck = verified.items.find((item) => item.verification === "requires_check");
+  const confirmed = verified.items.find((item) => item.status === "confirmed");
+  const requiresCheck = verified.items.find((item) => item.status === "review");
   assert.ok(confirmed, "нет подтверждённой карточки");
   assert.ok(requiresCheck, "нет карточки «требует проверки»");
-  assert.notEqual(confirmed.verification, requiresCheck.verification);
+  assert.notEqual(confirmed.status, requiresCheck.status);
   assert.ok(
     confirmed.recommendation_kind === "upgrade" || confirmed.recommendation_kind === "complement",
     "подтверждённая карточка должна быть апгрейдом или дополнением",
@@ -135,6 +129,6 @@ test("пример с проверкой совместимости отделя
 
 test("новый пример с проверкой не ломает старый пример на три карточки", () => {
   assert.equal(full.items.length, 3);
-  assert.ok(!full.items.some((item) => item.verification === "requires_check"));
+  assert.ok(!full.items.some((item) => item.status === "review"));
   assertEdgesResolvable(full, "full-after-verified");
 });

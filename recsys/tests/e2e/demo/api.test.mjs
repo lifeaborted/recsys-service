@@ -19,7 +19,7 @@ async function request(path, { token, body, requestID } = {}) {
   return { status: response.status, id: response.headers.get("x-request-id"), data };
 }
 
-test("seven OpenAPI operations, Swagger and isolated purchase-to-renewal flow", async () => {
+test("OpenAPI, feed metadata and isolated purchase-to-upgrade flow", async () => {
   const health = await request("/api/v1/health");
   assert.equal(health.status, 200);
   assert.equal(health.data.status, "ok");
@@ -56,6 +56,9 @@ test("seven OpenAPI operations, Swagger and isolated purchase-to-renewal flow", 
 
   const catalog = await request("/api/v1/products?limit=100", { token: first });
   assert.equal(catalog.status, 200);
+  assert.equal(catalog.data.feed_generated_at, health.data.feed_generated_at);
+  assert.match(catalog.data.feed_generated_at, /^2026-08-31T/);
+  assert.equal(catalog.data.limit, 100);
   assert.ok(catalog.data.items.some((item) => item.item_id === "DEMO-BASE" && item.available));
 
   const rejected = await request("/api/v1/purchases", {
@@ -65,8 +68,8 @@ test("seven OpenAPI operations, Swagger and isolated purchase-to-renewal flow", 
   const spoofedQuery = await request("/api/v1/recommendations/me?client_id=DEMO-NEW", { token: first });
   assert.equal(spoofedQuery.status, 400);
 
-  const recommend = async (token) => {
-    const result = await request("/api/v1/recommendations/me", { token });
+  const recommend = async (token, limit = 36) => {
+    const result = await request(`/api/v1/recommendations/me?limit=${limit}`, { token });
     assert.equal(result.status, 200);
     const body = result.data;
     assert.equal(body.request_id, result.id);
@@ -77,7 +80,11 @@ test("seven OpenAPI operations, Swagger and isolated purchase-to-renewal flow", 
       assert.ok(nodes.has(edge.from) && nodes.has(edge.to) && edge.source);
       assert.equal(edge.snapshot_id, body.snapshot_id);
     }
-    for (const item of body.items) assert.ok(item.evidence_ids.every((id) => edges.has(id)));
+    assert.ok(body.items.length <= limit);
+    for (const item of body.items) {
+      assert.notEqual(item.recommendation_kind, "renewal");
+      assert.ok(item.evidence_ids.every((id) => edges.has(id)));
+    }
     return body;
   };
   const isolated = (await recommend(second)).items.map((item) => item.item_id);
@@ -89,19 +96,18 @@ test("seven OpenAPI operations, Swagger and isolated purchase-to-renewal flow", 
 
   await purchase("DEMO-BASE");
   const before = await recommend(first);
-  const renewal = before.items.find((item) => item.item_id === "DEMO-RENEW-12");
-  assert.equal(renewal?.recommendation_kind, "renewal");
-  assert.deepEqual(renewal.variants.map((variant) => variant.item_id), ["DEMO-RENEW-12", "DEMO-RENEW-24"]);
-  assert.deepEqual(renewal.variants.map((variant) => variant.differences.find((d) => d.field === "term").value), [12, 24]);
-  assert.ok(renewal.evidence_ids.every((id) => before.graph.edges.some((edge) =>
-    edge.id === id && edge.from === "item:DEMO-BASE" && edge.type === "renewal")));
-  await purchase("DEMO-RENEW-12");
-  const after = await recommend(first);
-  assert.ok(after.items.some((item) => item.item_id === "DEMO-RENEW-24"));
-  assert.ok(!after.items.some((item) => item.item_id === "DEMO-RENEW-12" ||
-    item.variants.some((variant) => variant.item_id === "DEMO-RENEW-12")));
-  await purchase("DEMO-RENEW-24");
+  const upgrade = before.items.find((item) => item.item_id === "DEMO-UPGRADE");
+  assert.equal(upgrade?.recommendation_kind, "upgrade");
+  assert.ok(upgrade.evidence_ids.some((id) => before.graph.edges.some((edge) =>
+    edge.id === id && edge.from === "item:DEMO-BASE" && edge.type === "upgrade")));
+  assert.ok(before.items.some((item) => item.item_id === "DEMO-COMPLEMENT" && item.recommendation_kind === "complement"));
+  const limited = await recommend(first, 1);
+  assert.equal(limited.items.length, 1);
+  assert.equal(limited.partial_reason, null);
+  await purchase("DEMO-UPGRADE");
   const partial = await recommend(first);
+  assert.ok(partial.items.some((item) => item.item_id === "DEMO-COMPLEMENT"));
+  assert.ok(!partial.items.some((item) => item.item_id === "DEMO-UPGRADE"));
   assert.ok(partial.items.length > 0 && partial.items.length < 3);
   assert.equal(partial.partial_reason, "insufficient_eligible_products");
   assert.deepEqual((await recommend(second)).items.map((item) => item.item_id), isolated);

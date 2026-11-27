@@ -18,7 +18,7 @@ make run
 Материалы демо:
 
 - Как поднять стенд по шагам — [HANDOFF платформы](tests/e2e/platform/HANDOFF.md).
-- Числа A/B, доля вариантов и дата фида — [metrics.json](docs/demo/metrics.json).
+- Числа A/B и доля вариантов — [публичные агрегаты v5](tests/e2e/data/public-metrics.json). Дата относится к выгрузке фида, а фактические остатки меняются отдельно.
 - Лицензии и версии зависимостей — [THIRD_PARTY.md](THIRD_PARTY.md).
 - Офлайн- и онлайн-смета — [docs/demo/cost.md](docs/demo/cost.md).
 - Сценарий ролика и список кадров — [docs/demo/video.md](docs/demo/video.md).

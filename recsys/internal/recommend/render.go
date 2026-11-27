@@ -99,7 +99,7 @@ func render(snapshot string, mode contract.Mode, ordered []ranked, cards map[dom
 			out.Graph.Edges = append(out.Graph.Edges, e)
 		}
 	}
-	if len(out.Items) < 3 {
+	if len(out.Items) < min(limit, 3) {
 		reason := "insufficient_eligible_products"
 		out.PartialReason = &reason
 	}

@@ -14,7 +14,7 @@
       "explanation": "Старшая редакция совместима с текущей и доступна в текущем фиде.",
       "variants": [],
       "evidence_ids": ["demo-check-upgrade"],
-      "verification": "confirmed"
+      "status": "confirmed"
     },
     {
       "item_id": "DEMO-COMPLEMENT-CHECK",
@@ -27,7 +27,7 @@
       "explanation": "Модуль подходит по семейству, но совместимость требует проверки перед покупкой.",
       "variants": [],
       "evidence_ids": ["demo-check-complement"],
-      "verification": "requires_check"
+      "status": "review"
     }
   ],
   "graph": {

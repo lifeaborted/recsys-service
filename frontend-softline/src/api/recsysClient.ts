@@ -110,7 +110,7 @@ export async function getRecommendations(
 
   return request<Recommendations>(
     cfg,
-    `/recommendations/me?scenario=${encodeURIComponent(scenario)}`,
+    `/recommendations/me?scenario=${encodeURIComponent(scenario)}&limit=36`,
     { signal: options.signal },
   );
 }
@@ -145,7 +145,13 @@ export interface CatalogProduct {
   available: boolean;
 }
 
-export function listProducts(cfg: RecsysClientConfig, signal?: AbortSignal): Promise<{ items: CatalogProduct[] }> {
+export interface CatalogResponse {
+  items: CatalogProduct[];
+  catalog_version?: string;
+  feed_generated_at?: string;
+}
+
+export function listProducts(cfg: RecsysClientConfig, signal?: AbortSignal): Promise<CatalogResponse> {
   return request(cfg, "/products?limit=100", { signal });
 }
 

@@ -1,4 +1,4 @@
-import metrics from "../../../recsys/docs/demo/metrics.json";
+import { demoMetrics as metrics } from "../data/demoMetrics";
 import { DemoQualityChart } from "./DemoQualityChart";
 
 function percent(value: number): string {
@@ -9,12 +9,10 @@ function share(value: number): string {
   return `${Number(value.toFixed(2)).toString().replace(".", ",")}%`;
 }
 
-/**
- * Таблица качества демо. Числа лежат в recsys/docs/demo/metrics.json,
- * а не в компоненте: пока participant 1 не влил public-metrics.json,
- * файл помечен provisional.
- */
-export function DemoMetricsPanel() {
+export function DemoMetricsPanel({
+  feedDate,
+  catalogVersion,
+}: { feedDate?: string; catalogVersion?: string }) {
   const variants = metrics.variant_hits;
   const visits = metrics.visits_without_target_action;
 
@@ -22,7 +20,6 @@ export function DemoMetricsPanel() {
     <section className="demo-quality" aria-labelledby="demo-quality-title">
       <div className="demo-quality__head">
         <h2 id="demo-quality-title">Качество против baseline</h2>
-        {metrics.provisional ? <span className="demo-quality__provisional">provisional</span> : null}
       </div>
 
       <div className="demo-quality__scroll">
@@ -70,7 +67,7 @@ export function DemoMetricsPanel() {
         {" "}{metrics.protocol}
       </p>
       <p className="demo-quality__line demo-quality__line_feed">
-        Дата фида: <strong>{metrics.feed_date}</strong> ({metrics.feed_label}). {metrics.catalog_note}
+        Дата фида: <strong>{feedDate?.slice(0, 10) ?? metrics.feed_date}</strong> ({catalogVersion ?? (feedDate ? "каталог API" : metrics.feed_label)}). {metrics.catalog_note}
       </p>
       <p className="demo-quality__line demo-quality__line_note">{metrics.feed_note}</p>
       <DemoQualityChart />

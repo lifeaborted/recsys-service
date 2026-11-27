@@ -4,46 +4,46 @@
   "partial_reason": "insufficient_eligible_products",
   "items": [
     {
-      "item_id": "DEMO-RENEW-12",
-      "offer_id": "demo-offer-renew-12",
+      "item_id": "DEMO-MODULE-12",
+      "offer_id": "demo-offer-module-12",
       "sku": null,
-      "recommendation_kind": "renewal",
+      "recommendation_kind": "complement",
       "family_id": "DEMO-SUITE",
-      "title": "Продление на 12 месяцев",
-      "url": "https://store.softline.ru/demo/renew-12",
-      "explanation": "Для купленной редакции доступно продление на 12 или 24 месяца.",
+      "title": "Модуль отчётности на 12 месяцев",
+      "url": "https://store.softline.ru/demo/module-12",
+      "explanation": "Модуль добавляет отчётность к базовой редакции. Доступны лицензии на 12 и 24 месяца.",
       "variants": [
         {
-          "item_id": "DEMO-RENEW-12",
-          "url": "https://store.softline.ru/demo/renew-12",
+          "item_id": "DEMO-MODULE-12",
+          "url": "https://store.softline.ru/demo/module-12",
           "differences": [
             {"field": "term", "value": 12, "unit": "month", "source": "synthetic-offer-12"},
             {"field": "expires_at", "value": null, "unit": "date", "source": "synthetic-unknown-expiry"}
           ]
         },
         {
-          "item_id": "DEMO-RENEW-24",
-          "url": "https://store.softline.ru/demo/renew-24",
+          "item_id": "DEMO-MODULE-24",
+          "url": "https://store.softline.ru/demo/module-24",
           "differences": [
             {"field": "term", "value": 24, "unit": "month", "source": "synthetic-offer-24"},
             {"field": "expires_at", "value": "2028-11-26", "unit": "date", "source": "synthetic-offer-24"}
           ]
         }
       ],
-      "evidence_ids": ["demo-renewal"]
+      "evidence_ids": ["demo-module"]
     }
   ],
   "graph": {
     "nodes": [
       {"id": "item:DEMO-BASE", "type": "product", "label": "Купленная редакция"},
-      {"id": "item:DEMO-RENEW-12", "type": "product", "label": "Продление на 12 месяцев"}
+      {"id": "item:DEMO-MODULE-12", "type": "product", "label": "Модуль отчётности на 12 месяцев"}
     ],
     "edges": [
       {
-        "id": "demo-renewal",
+        "id": "demo-module",
         "from": "item:DEMO-BASE",
-        "to": "item:DEMO-RENEW-12",
-        "type": "renewal",
+        "to": "item:DEMO-MODULE-12",
+        "type": "complement",
         "weight": 1,
         "reason": "Совместимая редакция в синтетическом наборе.",
         "source": "synthetic-rule-1",

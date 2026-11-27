@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { listProducts, purchase, type CatalogProduct } from "../api/recsysClient";
+import { listProducts, purchase, type CatalogResponse } from "../api/recsysClient";
 import type { DemoScenario, GraphEdge, GraphNode, Recommendation } from "../api/recsysTypes";
 import { DemoGraphModal } from "../components/DemoGraphModal";
 import { DemoMetricsPanel } from "../components/DemoMetricsPanel";
@@ -33,7 +33,7 @@ export function DemoPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [graphModal, setGraphModal] = useState<GraphModalState | null>(null);
-  const [catalog, setCatalog] = useState<CatalogProduct[]>([]);
+  const [catalog, setCatalog] = useState<CatalogResponse | null>(null);
   const [selectedItem, setSelectedItem] = useState("");
 
   const cfg = {
@@ -43,12 +43,12 @@ export function DemoPage() {
   };
 
   useEffect(() => {
-    setCatalog([]);
+    setCatalog(null);
     setSelectedItem("");
     if (cfg.transport !== "http" || !cfg.token) return;
     const controller = new AbortController();
     listProducts(cfg, controller.signal).then(
-      (data) => setCatalog(data.items.filter((item) => item.available)),
+      (data) => setCatalog(data),
       (error: Error) => { if (!controller.signal.aborted) setNotice(error.message); },
     );
     return () => controller.abort();
@@ -67,6 +67,7 @@ export function DemoPage() {
     }
   };
 
+  const availableProducts = catalog?.items.filter((item) => item.available) ?? [];
   const items = demo.data?.items.slice(0, MAX_CARDS) ?? [];
   const graph = demo.data?.graph;
   const totalItems = demo.data?.items.length ?? 0;
@@ -142,13 +143,13 @@ export function DemoPage() {
         </p>
 
         {session.error ? <p role="alert">{session.error}</p> : null}
-        {catalog.length ? (
+        {availableProducts.length ? (
           <div className="demo-toolbar demo-toolbar_catalog">
             <label className="demo-catalog-field">
               <span>Каталог</span>
               <select value={selectedItem} onChange={(event) => setSelectedItem(event.target.value)}>
                 <option value="">Выберите товар</option>
-                {catalog.map((item) => <option key={item.item_id} value={item.item_id}>{item.title}</option>)}
+                {availableProducts.map((item) => <option key={item.item_id} value={item.item_id}>{item.title}</option>)}
               </select>
             </label>
             <button
@@ -221,7 +222,7 @@ export function DemoPage() {
         />
       ) : null}
 
-      <DemoMetricsPanel />
+      <DemoMetricsPanel feedDate={catalog?.feed_generated_at} catalogVersion={catalog?.catalog_version} />
     </div>
   );
 }

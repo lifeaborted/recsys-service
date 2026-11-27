@@ -67,4 +67,5 @@ type Recommendation struct {
 	Explanation  string             `json:"explanation"`
 	Variants     []Variant          `json:"variants"`
 	EvidenceIDs  []string           `json:"evidence_ids"`
+	Status       string             `json:"status,omitempty"`
 }

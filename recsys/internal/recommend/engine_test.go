@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strconv"
 	"testing"
 	"time"
 
@@ -358,7 +359,7 @@ func TestOnlineHidesRenewalAndKeepsUpgrade(t *testing.T) {
 	}
 }
 
-func TestOnlineCanReturnMoreThanThree(t *testing.T) {
+func TestOnlineAndBacktestCardLimits(t *testing.T) {
 	m := &memory{
 		client:   domain.Client{ID: "u", Group: domain.B2C},
 		cutoff:   time.Date(2026, 8, 31, 0, 0, 0, 0, time.UTC),
@@ -366,7 +367,8 @@ func TestOnlineCanReturnMoreThanThree(t *testing.T) {
 		sets:     map[contract.CandidateKey][]domain.Candidate{},
 		products: map[domain.ItemID]Product{"base": {}},
 	}
-	for _, id := range []domain.ItemID{"c1", "c2", "c3", "c4"} {
+	for i := range 40 {
+		id := domain.ItemID("candidate-" + strconv.Itoa(i))
 		m.products[id] = Product{Available: true, InSales: true, OfferID: offerID(string(id))}
 		m.add(contract.CandidateKey{Signal: "catalog"}, id)
 		m.add(contract.CandidateKey{Signal: "sales"}, id)
@@ -375,10 +377,10 @@ func TestOnlineCanReturnMoreThanThree(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(online.Items) != 4 || online.PartialReason != nil {
+	if len(online.Items) != 36 || online.PartialReason != nil {
 		t.Fatalf("online length: %d %v", len(online.Items), online.PartialReason)
 	}
-	back, err := New(m).Recommend(context.Background(), contract.RecommendationQuery{ClientID: "u", Mode: contract.Backtest, SnapshotID: "s"})
+	back, err := New(m).Recommend(context.Background(), contract.RecommendationQuery{ClientID: "u", Mode: contract.Backtest, SnapshotID: "s", Limit: 36})
 	if err != nil {
 		t.Fatal(err)
 	}

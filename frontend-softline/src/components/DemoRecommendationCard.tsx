@@ -50,14 +50,14 @@ export function DemoRecommendationCard({ item, edges, onPurchase, onShowGraph, b
   const [showVariants, setShowVariants] = useState(false);
   const [showReason, setShowReason] = useState(false);
 
-  const verification = item.verification === "requires_check"
+  const verification = item.status === "review"
     ? { label: "требует проверки", className: "demo-card__verification demo-card__verification_check" }
-    : item.verification === "confirmed"
+    : item.status === "confirmed"
       ? { label: "подтверждено", className: "demo-card__verification demo-card__verification_confirmed" }
       : null;
 
   return (
-    <article className={`demo-card${item.verification === "requires_check" ? " demo-card_requires-check" : ""}`}>
+    <article className={`demo-card${item.status === "review" ? " demo-card_requires-check" : ""}`}>
       <div className="demo-card__badges">
         <span className="demo-card__kind">{KIND_LABELS[item.recommendation_kind]}</span>
         {verification ? <span className={verification.className}>{verification.label}</span> : null}

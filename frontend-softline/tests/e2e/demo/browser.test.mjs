@@ -111,13 +111,13 @@ test("демо-экран: карточки, варианты, ошибка и �
   const profile = page.locator("select").nth(0);
   const scenario = page.locator("select").nth(2);
 
-  await t.test("полная выдача: три карточки и DEMO-RENEW", async () => {
+  await t.test("полная выдача: три карточки и варианты модуля", async () => {
     await profile.selectOption("u1");
     await scenario.selectOption("full");
     await page.waitForFunction(() => document.querySelectorAll(".demo-card").length === 3);
     const titles = await page.locator(".demo-card__title").allTextContents();
     assert.equal(titles.length, 3);
-    assert.ok(titles.includes("Продление на 12 месяцев"));
+    assert.ok(titles.includes("Модуль отчётности на 12 месяцев"));
 
     await page.getByRole("button", { name: "Сравнить варианты" }).first().click();
     const variants = await page.locator(".demo-variant").allTextContents();
@@ -136,7 +136,7 @@ test("демо-экран: карточки, варианты, ошибка и �
   await t.test("объяснение раскрывает только связанное ребро", async () => {
     await page.getByRole("button", { name: "Почему рекомендуем" }).first().click();
     const reason = await page.locator(".demo-card__source").first().textContent();
-    assert.match(reason, /item:DEMO-BASE → item:DEMO-RENEW-12/);
+    assert.match(reason, /item:DEMO-BASE → item:DEMO-MODULE-12/);
     assert.match(reason, /synthetic-rule-1/);
   });
 
@@ -149,7 +149,7 @@ test("демо-экран: карточки, варианты, ошибка и �
 
     const graph = dialog.locator(".demo-graph");
     const edges = await graph.locator(".demo-graph__edges").textContent();
-    assert.match(edges, /item:DEMO-BASE → item:DEMO-RENEW-12/);
+    assert.match(edges, /item:DEMO-BASE → item:DEMO-MODULE-12/);
     assert.doesNotMatch(edges, /DEMO-UPGRADE|DEMO-COMPLEMENT/, "в граф попали чужие рёбра");
     assert.ok(await graph.locator("svg").isVisible());
 
@@ -235,23 +235,22 @@ test("демо-экран: карточки, варианты, ошибка и �
     await transport.selectOption("http");
     await page.waitForFunction(() => document.querySelectorAll(".demo-card").length > 0);
     const cards = await page.locator(".demo-card").count();
-    assert.ok(cards > 0 && cards <= 3);
+    assert.ok(cards > 0 && cards <= 36);
     const status = await page.locator(".demo-status").first().textContent();
     assert.match(status, /request_id/);
     if (process.env.RECSYS_E2E_LIVE === "1") {
       await page.getByLabel("Каталог").selectOption("DEMO-BASE");
       await page.getByRole("button", { name: "Купить из каталога" }).click();
       await page.getByText("Покупка записана для DEMO-BASE").waitFor();
-      const renewal = page.locator(".demo-card").filter({ has: page.getByText("продление", { exact: true }) }).first();
-      await renewal.getByRole("button", { name: "Сравнить варианты" }).click();
-      await renewal.getByText("DEMO-RENEW-12 · 12 мес.").waitFor();
-      await renewal.getByText("DEMO-RENEW-24 · 24 мес.").waitFor();
-      await renewal.getByRole("button", { name: "Почему рекомендуем" }).click();
-      assert.match(await renewal.locator(".demo-card__source").first().textContent(), /item:DEMO-BASE → item:DEMO-RENEW-12/);
-      await renewal.getByRole("button", { name: "Купить DEMO-RENEW-12" }).click();
-      await page.getByText("Покупка записана для DEMO-RENEW-12").waitFor();
-      await page.getByRole("heading", { name: /24/ }).waitFor();
-      assert.equal(await page.getByText("DEMO-RENEW-12 · 12 мес.").count(), 0);
+      await page.getByText("Дата фида:").filter({ hasText: "2026-08-31" }).waitFor();
+      const upgrade = page.locator(".demo-card").filter({ has: page.getByText("апгрейд", { exact: true }) }).first();
+      await upgrade.getByRole("button", { name: "Почему рекомендуем" }).click();
+      assert.match(await upgrade.locator(".demo-card__source").first().textContent(), /item:DEMO-BASE → item:DEMO-UPGRADE/);
+      assert.equal(await page.locator(".demo-card").getByText("продление", { exact: true }).count(), 0);
+      await upgrade.getByRole("button", { name: "Купить товар", exact: true }).click();
+      await page.getByText("Покупка записана для DEMO-UPGRADE").waitFor();
+      await page.getByRole("heading", { name: "Дополнительный модуль", exact: true }).waitFor();
+      await upgrade.waitFor({ state: "hidden" });
     }
     await transport.selectOption("mock");
   });
