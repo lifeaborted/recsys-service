@@ -120,7 +120,7 @@ func TestRecommendationRPC(t *testing.T) {
 	}
 }
 
-func TestPlaintextGRPCRequiresLoopback(t *testing.T) {
+func TestPlaintextGRPCRequiresLoopbackByDefault(t *testing.T) {
 	if _, err := ServerCredentials(config.GRPCConfig{ListenAddr: "127.0.0.1:50051"}); err != nil {
 		t.Fatal(err)
 	}
@@ -129,5 +129,17 @@ func TestPlaintextGRPCRequiresLoopback(t *testing.T) {
 	}
 	if _, err := ClientCredentials(config.GRPCConfig{Target: "recommend.example.com:50051"}); err == nil {
 		t.Fatal("plaintext client accepted a non-loopback target")
+	}
+
+	cfg := config.GRPCConfig{ListenAddr: "0.0.0.0:50051", Target: "recommend:50051", AllowInsecure: true}
+	if _, err := ServerCredentials(cfg); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ClientCredentials(cfg); err != nil {
+		t.Fatal(err)
+	}
+	cfg.CertFile = "partial-configuration.pem"
+	if _, err := ServerCredentials(cfg); err == nil {
+		t.Fatal("partial TLS configuration fell back to plaintext")
 	}
 }

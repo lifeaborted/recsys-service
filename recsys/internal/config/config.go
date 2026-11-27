@@ -30,11 +30,12 @@ type Config struct {
 
 // GRPCConfig configures the recommendation service and its API client.
 type GRPCConfig struct {
-	ListenAddr string
-	Target     string
-	CertFile   string
-	KeyFile    string
-	CAFile     string
+	ListenAddr    string
+	Target        string
+	CertFile      string
+	KeyFile       string
+	CAFile        string
+	AllowInsecure bool
 }
 
 // LookupFunc resolves an environment variable by name.
@@ -80,11 +81,12 @@ func LoadFromLookup(lookup LookupFunc) Config {
 
 	return Config{
 		GRPC: GRPCConfig{
-			ListenAddr: get("RECSYS_GRPC_ADDR", "127.0.0.1:50051"),
-			Target:     get("RECSYS_GRPC_TARGET", "127.0.0.1:50051"),
-			CertFile:   get("RECSYS_GRPC_CERT_FILE", ""),
-			KeyFile:    get("RECSYS_GRPC_KEY_FILE", ""),
-			CAFile:     get("RECSYS_GRPC_CA_FILE", ""),
+			ListenAddr:    get("RECSYS_GRPC_ADDR", "127.0.0.1:50051"),
+			Target:        get("RECSYS_GRPC_TARGET", "127.0.0.1:50051"),
+			CertFile:      get("RECSYS_GRPC_CERT_FILE", ""),
+			KeyFile:       get("RECSYS_GRPC_KEY_FILE", ""),
+			CAFile:        get("RECSYS_GRPC_CA_FILE", ""),
+			AllowInsecure: get("RECSYS_GRPC_ALLOW_INSECURE", "") == "1",
 		},
 		Addr:            get("RECSYS_ADDR", "127.0.0.1:8080"),
 		DatabaseURL:     dsn,

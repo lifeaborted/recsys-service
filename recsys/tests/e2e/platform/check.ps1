@@ -38,7 +38,7 @@ $pgTxDb = "recsys_tx_$runId"
 # Scrub any ambient DB env vars so we NEVER touch a working/production database.
 foreach ($name in @(
     "DATABASE_URL", "RECSYS_DATABASE_URL", "RECSYS_ENV_FILE", "HOST", "PORT", "USER", "PASSWORD", "DATABASE", "DATADASE", "SSLMODE",
-    "RECSYS_GRPC_CERT_FILE", "RECSYS_GRPC_KEY_FILE", "RECSYS_GRPC_CA_FILE", "LLM_BASE_URL", "LLM_API_KEY", "LLM_MODEL"
+    "RECSYS_GRPC_CERT_FILE", "RECSYS_GRPC_KEY_FILE", "RECSYS_GRPC_CA_FILE", "RECSYS_GRPC_ALLOW_INSECURE", "LLM_BASE_URL", "LLM_API_KEY", "LLM_MODEL"
 )) {
     Remove-Item "Env:$name" -ErrorAction SilentlyContinue
 }

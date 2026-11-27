@@ -44,7 +44,7 @@ func loadTLS(cfg config.GRPCConfig, address string) (*tls.Config, error) {
 	}
 	if cfg.CertFile == "" && cfg.KeyFile == "" && cfg.CAFile == "" {
 		ip, _ := netip.ParseAddr(host)
-		if !ip.IsLoopback() && !strings.EqualFold(host, "localhost") {
+		if !cfg.AllowInsecure && !ip.IsLoopback() && !strings.EqualFold(host, "localhost") {
 			return nil, fmt.Errorf("gRPC address %q requires mutual TLS", address)
 		}
 		return nil, nil

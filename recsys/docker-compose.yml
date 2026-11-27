@@ -1,0 +1,14 @@
+name: recsys-recommend
+
+services:
+  recommend:
+    build:
+      context: .
+    environment:
+      DATABASE_URL: "${DATABASE_URL:-}"
+      RECSYS_GRPC_ADDR: "0.0.0.0:50051"
+      RECSYS_GRPC_ALLOW_INSECURE: "1"
+    ports:
+      - "127.0.0.1:${RECSYS_GRPC_PORT:-50051}:50051"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

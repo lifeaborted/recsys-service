@@ -2,21 +2,13 @@ GO ?= go
 NODE ?= node
 PWSH ?= pwsh
 PROTOC ?= protoc
-COMPOSE ?= docker compose
-DEV_COMPOSE = $(COMPOSE) -p recsys-dev -f compose.yml
 RECSYS_DEV_PG_PORT ?= 55432
 STAND_DATABASE_URL ?= postgres://recsys_dev:recsys_dev@127.0.0.1:$(RECSYS_DEV_PG_PORT)/recsys_dev?sslmode=disable
 DATABASE_URL ?= $(STAND_DATABASE_URL)
 API_URL ?= http://127.0.0.1:8080
 ARGS ?=
 
-.PHONY: up down run run-recommend generate-proto seed import enrich embed-catalog build-signals backtest swagger check test-e2e test-unit
-
-up:
-	$(DEV_COMPOSE) up -d --wait postgres
-
-down:
-	$(DEV_COMPOSE) down
+.PHONY: run run-recommend generate-proto seed import enrich embed-catalog build-signals backtest swagger check test-e2e test-unit
 
 run:
 	$(GO) run -mod=readonly ./cmd/api

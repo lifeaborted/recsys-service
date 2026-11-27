@@ -4,8 +4,9 @@ Go 1.26, Node.js 22+, PostgreSQL 17 и pgx. Команды выполняютс�
 
 ## Локальное демо
 
+Укажите `DATABASE_URL` отдельной базы PostgreSQL с `pg_trgm`. Для контейнерного запуска используйте [инструкцию Docker Compose](../README.md#запуск-двух-сервисов-в-docker-compose).
+
 ```powershell
-make up
 $env:DATABASE_URL = 'postgres://recsys_dev:recsys_dev@127.0.0.1:55432/recsys_dev?sslmode=disable'
 make seed
 make run-recommend
@@ -18,7 +19,7 @@ $env:DATABASE_URL = 'postgres://recsys_dev:recsys_dev@127.0.0.1:55432/recsys_dev
 make run
 ```
 
-`make up` поднимает dev PostgreSQL с `pg_trgm` и `vector`. `make down` останавливает Compose и сохраняет том. `make seed` применяет миграции и загружает синтетику с `snapshot_id=demo-v1`. Повтор seed на синтетической БД идемпотентен. Порт API по умолчанию 8080. При использовании `RECSYS_DEV_PG_PORT` укажите этот же порт в `DATABASE_URL`. `make swagger` получает спецификацию запущенного API, интерфейс доступен на [Swagger UI](http://127.0.0.1:8080/swagger/).
+`make seed` применяет миграции и загружает синтетику с `snapshot_id=demo-v1`. Повтор seed на синтетической БД идемпотентен. Порт API по умолчанию 8080. В `DATABASE_URL` укажите фактический порт PostgreSQL. `make swagger` получает спецификацию запущенного API, интерфейс доступен на [Swagger UI](http://127.0.0.1:8080/swagger/).
 
 В третьем терминале запустите `npm ci` и `npm run dev` из `frontend-softline`. Откройте `http://localhost:5173/#/demo`, выберите HTTP и профиль. Сценарий покупки и браузерные команды есть в [инструкции демо](docs/demo/README.md).
 

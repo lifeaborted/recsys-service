@@ -4,21 +4,65 @@
 
 Проект собран на Go 1.26, PostgreSQL 17, React 18, TypeScript и Vite. Демо работает с собственным API команды.
 
+## Запуск двух сервисов в Docker Compose
+
+У каждого сервиса свой каталог с `Dockerfile` и `docker-compose.yml`. Для отдельного запуска перейдите в каталог сервиса. Обе команды ниже начинаются из корня репозитория. Параметр `-t 10` задаёт таймаут остановки в секундах.
+
+**HTTP-заглушка** ([frontend-softline](frontend-softline))
+
+```sh
+cd frontend-softline
+docker compose up -d --build -t 10
+curl -fsS http://127.0.0.1:8080/api/v1/health
+```
+
+Compose в `frontend-softline` запускает HTTP-заглушку из общего Go-модуля. В режиме `stub` она работает на синтетических примерах. Для проверки можно войти с демо-профилем `demo-b2b` и паролем `demo-b2b-pass`.
+
+**gRPC-сервис рекомендаций** ([recsys](recsys))
+
+Задайте `DATABASE_URL` существующей PostgreSQL с применёнными миграциями и активным снимком. Адрес в DSN должен быть доступен из контейнера. Для PostgreSQL на машине, где работает Docker Engine, можно использовать `host.docker.internal` при доступе к базе с интерфейса Docker.
+
+```sh
+export DATABASE_URL='postgres://user:password@host.docker.internal:5432/recsys?sslmode=disable'
+cd recsys
+docker compose up -d --build -t 10
+docker compose ps
+```
+
+На синтетической БД со снимком `demo-v1` проверка из корня репозитория выглядит так.
+
+```sh
+echo '{"clientId":"DEMO-BUYER","limit":3}' |
+  grpcurl -plaintext -import-path recsys -proto api/recommendation/v1/recommendation.proto -d @ 127.0.0.1:50051 recsys.recommendation.v1.RecommendationService/GetRecommendations
+```
+
+Для проверки цепочки HTTP → gRPC на той же БД выполните команду с двумя файлами из корня репозитория. Compose запустит сервисы в общей сети. Если эти порты уже заняты отдельными экземплярами, выполните `docker compose down` в каталогах сервисов.
+
+```sh
+RECSYS_MOCK=0 docker compose -p recsys-demo \
+  -f recsys/docker-compose.yml \
+  -f frontend-softline/docker-compose.yml \
+  up -d --build -t 10
+```
+
+Опубликованные порты привязаны к `127.0.0.1`. Для запуска на занятом порту задайте `RECSYS_HTTP_PORT` или `RECSYS_GRPC_PORT`. Внутри Compose HTTP API обращается к `recommend:50051`. Этот локальный стенд использует plaintext gRPC. Настройки mTLS для отдельных систем приведены в [README сервиса](recsys/README.md#grpc-для-других-систем).
+
 ## Быстрый запуск
 
 Понадобятся Go 1.26+, Node.js 22+, GNU Make и Docker с Compose v2. Запустите команды в трёх терминалах из корня репозитория. Для синтетического демо достаточно файлов из Git.
 
-**Терминал 1. PostgreSQL и сервис рекомендаций (PowerShell)**
+**Терминал 1. Сервис рекомендаций (PowerShell)**
+
+Подготовьте отдельную демо-базу PostgreSQL и укажите её адрес в `DATABASE_URL`.
 
 ```powershell
 cd recsys
-make up
 $env:DATABASE_URL = 'postgres://recsys_dev:recsys_dev@127.0.0.1:55432/recsys_dev?sslmode=disable'
 make seed
 make run-recommend
 ```
 
-В Bash и Zsh задайте ту же переменную через `export DATABASE_URL='…'`. `make seed` применяет миграции и загружает тестовый каталог, профили и снимок `demo-v1`. При наличии локального PostgreSQL 17 с `pg_trgm` можно сразу задать DSN отдельной пустой базы и выполнить `make seed` и запустить оба Go-процесса. `make down` останавливает контейнер и сохраняет том с данными.
+В Bash и Zsh задайте ту же переменную через `export DATABASE_URL='…'`. `make seed` применяет миграции и загружает тестовый каталог, профили и снимок `demo-v1`. Для синтетики подойдёт PostgreSQL 17 с расширением `pg_trgm`.
 
 **Терминал 2. HTTP API (PowerShell)**
 

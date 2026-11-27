@@ -1,0 +1,17 @@
+name: recsys-stub
+
+services:
+  stub:
+    build:
+      context: ../recsys
+      dockerfile: ../frontend-softline/Dockerfile
+    environment:
+      RECSYS_ADDR: "0.0.0.0:8080"
+      RECSYS_MOCK: "${RECSYS_MOCK:-1}"
+      DATABASE_URL: "${DATABASE_URL:-}"
+      RECSYS_GRPC_TARGET: "recommend:50051"
+      RECSYS_GRPC_ALLOW_INSECURE: "1"
+    ports:
+      - "127.0.0.1:${RECSYS_HTTP_PORT:-8080}:8080"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
