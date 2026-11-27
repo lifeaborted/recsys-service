@@ -31,6 +31,21 @@ func (a pgTransportAdapter) CheckHealth(ctx context.Context) (string, error) {
 	return a.store.CheckHealth(ctx)
 }
 
+func (a pgTransportAdapter) CatalogMeta(ctx context.Context) (transporthttp.CatalogMetaDTO, error) {
+	meta, err := a.store.CatalogMeta(ctx)
+	if err != nil {
+		return transporthttp.CatalogMetaDTO{}, err
+	}
+	var out transporthttp.CatalogMetaDTO
+	if meta.CatalogVersion != "" {
+		ver := meta.CatalogVersion
+		out.CatalogVersion = &ver
+	}
+	out.FeedGeneratedAt = meta.FeedGeneratedAt
+	out.CatalogImportedAt = meta.ImportedAt
+	return out, nil
+}
+
 func (a pgTransportAdapter) ListProducts(ctx context.Context, limit int) ([]transporthttp.ProductDTO, error) {
 	rows, err := a.store.ListProducts(ctx, limit)
 	if err != nil {
@@ -75,6 +90,15 @@ type mockBackend struct {
 
 func (m mockBackend) CheckHealth(_ context.Context) (string, error) { return "mock", nil }
 
+func (m mockBackend) CatalogMeta(_ context.Context) (transporthttp.CatalogMetaDTO, error) {
+	ver := "demo-v1"
+	genAt := time.Date(2026, 8, 31, 12, 0, 0, 0, time.UTC)
+	return transporthttp.CatalogMetaDTO{
+		CatalogVersion:  &ver,
+		FeedGeneratedAt: &genAt,
+	}, nil
+}
+
 func (m mockBackend) ListProducts(_ context.Context, _ int) ([]transporthttp.ProductDTO, error) {
 	return []transporthttp.ProductDTO{}, nil
 }
@@ -99,36 +123,48 @@ func (m mockBackend) Recommend(_ context.Context, q contract.RecommendationQuery
 	return resp.RecommendationResult, nil
 }
 
+func buildMockServer(ctx context.Context, cfg config.Config, log *slog.Logger) (*transporthttp.Server, error) {
+	openAPISpec, _ := os.ReadFile(cfg.OpenAPIPath)
+	memRepo := auth.NewMemoryRepository()
+	authSvc := auth.NewService(memRepo, auth.WithSessionTTL(cfg.SessionTTL), auth.WithBcryptCost(cfg.BcryptCost))
+	_, _, _ = authSvc.Register(ctx, auth.RegisterInput{Login: "demo-b2b", Password: "demo-b2b-pass", ClientGroup: domain.B2B})
+	_, _, _ = authSvc.Register(ctx, auth.RegisterInput{Login: "demo-b2c", Password: "demo-b2c-pass", ClientGroup: domain.B2C})
+	mb := mockBackend{examplesDir: cfg.ExamplesDir}
+	return transporthttp.NewServer(transporthttp.Config{
+		Auth:           authSvc,
+		Health:         mb,
+		Catalog:        mb,
+		CatalogMeta:    mb,
+		Purchases:      mb,
+		Recommender:    mb,
+		Logger:         log,
+		OpenAPISpec:    openAPISpec,
+		RequestTimeout: cfg.RequestTimeout,
+	}), nil
+}
+
 func main() {
 	log := logger.New(os.Stdout, slog.LevelInfo)
 	cfg := config.Load()
 
-	openAPISpec, err := os.ReadFile(cfg.OpenAPIPath)
-	if err != nil {
-		log.Warn("could not read OpenAPI file; /swagger/openapi.yaml will return 404", "path", cfg.OpenAPIPath, "error", err)
-	}
-
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	var httpCfg transporthttp.Config
-	httpCfg.Logger = log
-	httpCfg.OpenAPISpec = openAPISpec
-	httpCfg.RequestTimeout = cfg.RequestTimeout
-
+	var handler http.Handler
 	var store *postgres.Store
 	if cfg.Mock {
-		memRepo := auth.NewMemoryRepository()
-		authSvc := auth.NewService(memRepo, auth.WithSessionTTL(cfg.SessionTTL), auth.WithBcryptCost(cfg.BcryptCost))
-		_, _, _ = authSvc.Register(ctx, auth.RegisterInput{Login: "demo-b2b", Password: "demo-b2b-pass", ClientGroup: domain.B2B})
-		_, _, _ = authSvc.Register(ctx, auth.RegisterInput{Login: "demo-b2c", Password: "demo-b2c-pass", ClientGroup: domain.B2C})
-		mb := mockBackend{examplesDir: cfg.ExamplesDir}
-		httpCfg.Auth = authSvc
-		httpCfg.Health = mb
-		httpCfg.Catalog = mb
-		httpCfg.Purchases = mb
-		httpCfg.Recommender = mb
+		srv, err := buildMockServer(ctx, cfg, log)
+		if err != nil {
+			log.Error("failed to initialize mock server", "error", err)
+			os.Exit(1)
+		}
+		handler = srv
 	} else {
+		openAPISpec, err := os.ReadFile(cfg.OpenAPIPath)
+		if err != nil {
+			log.Warn("could not read OpenAPI file; /swagger/openapi.yaml will return 404", "path", cfg.OpenAPIPath, "error", err)
+		}
+
 		openCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		store, err = postgres.OpenContext(openCtx, cfg.DatabaseURL)
 		cancel()
@@ -139,21 +175,26 @@ func main() {
 		defer store.Close()
 
 		adapter := pgTransportAdapter{store: store}
-		httpCfg.Auth = auth.NewService(store, auth.WithSessionTTL(cfg.SessionTTL), auth.WithBcryptCost(cfg.BcryptCost))
-		httpCfg.Health = adapter
-		httpCfg.Catalog = adapter
-		httpCfg.Purchases = adapter
-		// Constructor-injected contract.Recommender (single wiring point for final assembly).
 		engine := recommend.New(store)
 		if os.Getenv("LLM_BASE_URL") != "" && os.Getenv("LLM_MODEL") != "" {
 			engine.UseReranker(explain.ChatFromEnv())
 		}
-		httpCfg.Recommender = engine
+		handler = transporthttp.NewServer(transporthttp.Config{
+			Auth:           auth.NewService(store, auth.WithSessionTTL(cfg.SessionTTL), auth.WithBcryptCost(cfg.BcryptCost)),
+			Health:         adapter,
+			Catalog:        adapter,
+			CatalogMeta:    adapter,
+			Purchases:      adapter,
+			Recommender:    engine,
+			Logger:         log,
+			OpenAPISpec:    openAPISpec,
+			RequestTimeout: cfg.RequestTimeout,
+		})
 	}
 
 	server := &http.Server{
 		Addr:              cfg.Addr,
-		Handler:           transporthttp.NewServer(httpCfg),
+		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      cfg.RequestTimeout + 5*time.Second,

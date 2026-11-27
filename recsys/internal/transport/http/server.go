@@ -39,6 +39,18 @@ type ProductDTO struct {
 	URL          *string       `json:"url,omitempty"`
 }
 
+// CatalogMetaDTO carries optional catalog feed version and update timestamps.
+type CatalogMetaDTO struct {
+	CatalogVersion    *string
+	FeedGeneratedAt   *time.Time
+	CatalogImportedAt *time.Time
+}
+
+// CatalogMetaReader optionally supplies catalog feed version and update date for /health and /products.
+type CatalogMetaReader interface {
+	CatalogMeta(ctx context.Context) (CatalogMetaDTO, error)
+}
+
 // CatalogStore reads storefront products for GET /api/v1/products.
 type CatalogStore interface {
 	ListProducts(ctx context.Context, limit int) ([]ProductDTO, error)
@@ -61,6 +73,7 @@ type Config struct {
 	Auth           *auth.Service
 	Health         HealthChecker
 	Catalog        CatalogStore
+	CatalogMeta    CatalogMetaReader
 	Purchases      PurchaseStore
 	Recommender    contract.Recommender
 	Logger         *slog.Logger
@@ -73,6 +86,7 @@ type Server struct {
 	auth        *auth.Service
 	health      HealthChecker
 	catalog     CatalogStore
+	catalogMeta CatalogMetaReader
 	purchases   PurchaseStore
 	recommender contract.Recommender
 	log         *slog.Logger
@@ -96,6 +110,7 @@ func NewServer(cfg Config) *Server {
 		auth:        cfg.Auth,
 		health:      cfg.Health,
 		catalog:     cfg.Catalog,
+		catalogMeta: cfg.CatalogMeta,
 		purchases:   cfg.Purchases,
 		recommender: cfg.Recommender,
 		log:         log,
