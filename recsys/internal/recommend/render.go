@@ -7,6 +7,13 @@ import (
 	"recsys/internal/domain"
 )
 
+func cardLimit(mode contract.Mode) int {
+	if mode == contract.Online {
+		return 36
+	}
+	return 3
+}
+
 func render(snapshot string, mode contract.Mode, ordered []ranked, cards map[domain.ItemID]Product) contract.RecommendationResult {
 	out := contract.RecommendationResult{SnapshotID: snapshot, Items: []domain.Recommendation{}, Graph: domain.Graph{Nodes: []domain.Node{}, Edges: []domain.Evidence{}}}
 	type group struct {
@@ -21,7 +28,7 @@ func render(snapshot string, mode contract.Mode, ordered []ranked, cards map[dom
 		grouped := mode == contract.Online && p.FamilyID != "" && p.FamilySource != ""
 		idx, exists := groups[g]
 		if !grouped || !exists {
-			if len(out.Items) == 3 {
+			if len(out.Items) == cardLimit(mode) {
 				continue
 			}
 			idx = len(out.Items)
