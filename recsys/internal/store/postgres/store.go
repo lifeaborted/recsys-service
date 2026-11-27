@@ -38,9 +38,11 @@ var (
 
 // Store wraps a pgxpool.Pool for transactional access to schema recommendations.
 type Store struct {
-	pool       *pgxpool.Pool
-	ownsPool   bool
-	minVersion string
+	pool           *pgxpool.Pool
+	ownsPool       bool
+	minVersion     string
+	onlineSnapshot string
+	embeddingModel string
 }
 
 // Option customizes a Store instance.
@@ -52,6 +54,14 @@ func WithExpectedSchemaVersion(version string) Option {
 		if strings.TrimSpace(version) != "" {
 			s.minVersion = strings.TrimSpace(version)
 		}
+	}
+}
+
+// WithOnlineSources pins the default online snapshot and selects the model for vector candidates.
+func WithOnlineSources(snapshot, embeddingModel string) Option {
+	return func(s *Store) {
+		s.onlineSnapshot = strings.TrimSpace(snapshot)
+		s.embeddingModel = strings.TrimSpace(embeddingModel)
 	}
 }
 

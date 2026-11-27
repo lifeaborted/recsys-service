@@ -264,7 +264,7 @@ func main() {
 		}
 
 		openCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-		store, err = postgres.OpenContext(openCtx, cfg.DatabaseURL)
+		store, err = postgres.OpenContext(openCtx, cfg.DatabaseURL, postgres.WithOnlineSources(os.Getenv("RECSYS_ONLINE_SNAPSHOT"), ""))
 		cancel()
 		if err != nil {
 			log.Error("failed to open PostgreSQL pool", "error", err)

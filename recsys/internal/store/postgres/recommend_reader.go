@@ -32,6 +32,9 @@ func (s *Store) SnapshotMetadata(ctx context.Context, id string) (SnapshotMetada
 }
 
 func (s *Store) SnapshotInfo(ctx context.Context, id string) (recommend.SnapshotInfo, error) {
+	if id == "" {
+		id = s.onlineSnapshot
+	}
 	m, err := s.SnapshotMetadata(ctx, id)
 	return m.SnapshotInfo, err
 }

@@ -42,7 +42,7 @@ func run(ctx context.Context, cfg config.Config, log *slog.Logger) error {
 	}
 	startupCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	store, err := postgres.OpenContext(startupCtx, cfg.DatabaseURL)
+	store, err := postgres.OpenContext(startupCtx, cfg.DatabaseURL, postgres.WithOnlineSources(os.Getenv("RECSYS_ONLINE_SNAPSHOT"), os.Getenv("EMBED_MODEL")))
 	if err != nil {
 		return err
 	}

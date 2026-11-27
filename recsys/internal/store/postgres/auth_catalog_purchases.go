@@ -175,10 +175,11 @@ func (s *Store) CatalogMeta(ctx context.Context) (CatalogMetadata, error) {
 			SELECT fv.catalog_version, fv.feed_generated_at, fv.imported_at
 			FROM recommendations.catalog_feed_versions fv
 			LEFT JOIN recommendations.model_snapshots ms
-				ON ms.catalog_version = fv.catalog_version AND ms.is_active
+				ON ms.catalog_version = fv.catalog_version
+				AND (($1 = '' AND ms.is_active) OR ms.snapshot_id = NULLIF($1, ''))
 			ORDER BY (ms.snapshot_id IS NOT NULL) DESC, fv.feed_generated_at DESC, fv.imported_at DESC
 			LIMIT 1
-		`).Scan(&ver, &genAt, &impAt)
+		`, s.onlineSnapshot).Scan(&ver, &genAt, &impAt)
 		if err == nil {
 			g := genAt.UTC()
 			im := impAt.UTC()
