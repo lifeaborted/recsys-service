@@ -6,6 +6,7 @@ import {
   RecsysError,
   sendFeedback,
   type DbStats,
+  type NewRunItem,
   type RunInfo,
 } from "../api/client";
 import type { FeedbackPayload, RecommendationItem, Scenario } from "../api/types";
@@ -21,10 +22,10 @@ export function RecommendationsPage() {
   const { settings, update } = useSettings();
   const [stats, setStats] = useState<DbStats | null>(null);
   const [runs, setRuns] = useState<RunInfo[]>([]);
+  const [lastRunID, setLastRunID] = useState<number | null>(null);
   const [clientId, setClientId] = useState("—");
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
 
   const apiConfig = {
     baseUrl: settings.baseUrl,
@@ -33,6 +34,12 @@ export function RecommendationsPage() {
   };
 
   const loadDb = useCallback(async () => {
+    if (!settings.token) {
+      setStats(null);
+      setRuns([]);
+      setClientId("—");
+      return;
+    }
     if (settings.mockMode) {
       setStats(null);
       setRuns([]);
@@ -64,21 +71,25 @@ export function RecommendationsPage() {
   }, [loadDb]);
 
   const handleNewRun = async () => {
-    setBusy(true);
     setNotice(null);
+    if (settings.mockMode) {
+      setNotice("В mock-режиме новый run не создаётся — включите реальный API в Профиле.");
+      return;
+    }
+    const items: NewRunItem[] = (reco.data?.items ?? []).slice(0, Math.min(3, settings.limit)).map((item) => ({
+      item_id: item.item_id,
+      offer_id: item.offer_id ?? "",
+      explanation: item.reason ?? "Создано на стенде",
+      score: item.score,
+    }));
     try {
-      if (settings.mockMode) {
-        setNotice("В mock-режиме новый run не создаётся — включите реальный API в Профиле.");
-      } else {
-        const created = await createRun(apiConfig, settings.userId);
-        setNotice(`Создан run #${created.run_id}, товаров: ${created.count}`);
-        await loadDb();
-      }
+      const created = await createRun(apiConfig, items, stats?.model_version);
+      setLastRunID(created.run_id);
+      setNotice(`Создан run #${created.run_id} в БД, товаров: ${created.items.length}`);
+      await loadDb();
       reco.refresh();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Ошибка создания run");
-    } finally {
-      setBusy(false);
     }
   };
 
@@ -86,6 +97,8 @@ export function RecommendationsPage() {
     const payload: FeedbackPayload = {
       user_id: settings.userId,
       item_id: item.item_id,
+      offer_id: item.offer_id,
+      run_id: lastRunID ?? runs[0]?.run_id,
       action,
       scenario: settings.scenario,
       request_id: reco.data?.request_id ?? null,
@@ -95,7 +108,7 @@ export function RecommendationsPage() {
     try {
       if (settings.mockMode) await mockFeedback(payload);
       else await sendFeedback(apiConfig, payload);
-      setNotice(`Событие «${action === "click" ? "click" : "purchase"}» записано для ${item.item_id}`);
+      setNotice(`Событие «${action === "click" ? "click" : "purchase"}» записано в БД для ${item.item_id}`);
       await loadDb();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Ошибка записи события");
@@ -118,7 +131,7 @@ export function RecommendationsPage() {
           <div className="stat-card__label">режим</div>
         </div>
         <div className="stat-card">
-          <div className="stat-card__value">{stats?.model_version ?? "—"}</div>
+          <div className="stat-card__value" title={stats?.model_version ?? "—"}>{stats?.model_version ?? "—"}</div>
           <div className="stat-card__label">модель</div>
         </div>
         <div className="stat-card">
@@ -174,13 +187,11 @@ export function RecommendationsPage() {
           </div>
           <div className="form-field">
             <label>Лимит</label>
-            <input
-              type="number"
-              min={1}
-              max={50}
-              value={settings.limit}
-              onChange={(event) => update({ limit: Math.max(1, Number(event.target.value) || 1) })}
-            />
+            <select value={settings.limit} onChange={(event) => update({ limit: Number(event.target.value) })}>
+              {[1, 2, 3, 4, 5, 6, 9, 12, 24, 36].map((value) => (
+                <option key={value} value={value}>{value}</option>
+              ))}
+            </select>
           </div>
           <div className="form-field">
             <label>Режим</label>
@@ -194,18 +205,23 @@ export function RecommendationsPage() {
           <button
             className="button button_primary button_size-l"
             type="button"
-            onClick={reco.refresh}
+            onClick={() => {
+              setNotice("Выдача запрошена повторно");
+              reco.refresh();
+            }}
             disabled={reco.status === "loading"}
           >
             {reco.status === "loading" ? "Запрос…" : "Запросить выдачу"}
+          </button>
+          <button className="button button_default button_size-l" type="button" onClick={reco.refresh}>
+            Применить лимит
           </button>
           <button
             className="button button_default button_size-l"
             type="button"
             onClick={() => void handleNewRun()}
-            disabled={busy}
           >
-            {busy ? "Создаём…" : "Новый run"}
+            Новый run
           </button>
         </div>
         <p className="form-note">
@@ -213,6 +229,9 @@ export function RecommendationsPage() {
             ? `${reco.meta.mode} · ${formatDateTime(reco.meta.at)} · ${formatDuration(reco.meta.durationMs)} · ${reco.meta.requestUrl}`
             : "Запросов ещё не было"}
         </p>
+        {!settings.mockMode && settings.scenario !== "demo" ? (
+          <p className="form-note">Сценарий применён на клиенте: публичный API не принимает scenario.</p>
+        ) : null}
         {notice ? <p className="form-note">{notice}</p> : null}
         {error ? <p className="form-note error">{error}</p> : null}
       </div>

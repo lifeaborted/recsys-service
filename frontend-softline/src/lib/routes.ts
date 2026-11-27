@@ -1,6 +1,7 @@
 export const ROUTES = [
   "overview",
   "demo",
+  "demo-product",
   "recommendations",
   "catalog",
   "invoices",
@@ -20,6 +21,7 @@ export type RouteKey = (typeof ROUTES)[number];
 export const ROUTE_TITLES: Record<RouteKey, { title: string; caption: string }> = {
   overview: { title: "Главная", caption: "Личный кабинет" },
   demo: { title: "Рекомендации", caption: "Демо ЛК: карточки и варианты" },
+  "demo-product": { title: "Товар", caption: "Демо ЛК: полная информация о товаре" },
   recommendations: { title: "Тест рекомендаций", caption: "Проверка БД и алгоритма" },
   catalog: { title: "Продукты", caption: "Каталог Softline" },
   invoices: { title: "Счета и платежи", caption: "Счета и платежи" },
@@ -41,4 +43,9 @@ export function isRouteKey(value: string): value is RouteKey {
 export function parseRoute(hash: string): RouteKey {
   const normalized = hash.replace(/^#\/?/, "").split("?")[0].trim();
   return isRouteKey(normalized) ? normalized : "overview";
+}
+
+export function getRouteParam(name: string, hash = window.location.hash): string | null {
+  const query = hash.split("?")[1] ?? "";
+  return new URLSearchParams(query).get(name);
 }

@@ -53,14 +53,18 @@ type Variant struct {
 }
 
 type Recommendation struct {
-	ItemID      ItemID             `json:"item_id"`
-	OfferID     *string            `json:"offer_id,omitempty"`
-	SKU         *string            `json:"sku"`
-	Kind        RecommendationKind `json:"recommendation_kind"`
-	FamilyID    *string            `json:"family_id"`
-	Title       string             `json:"title"`
-	URL         *string            `json:"url,omitempty"`
-	Explanation string             `json:"explanation"`
-	Variants    []Variant          `json:"variants"`
-	EvidenceIDs []string           `json:"evidence_ids"`
+	ItemID       ItemID             `json:"item_id"`
+	OfferID      *string            `json:"offer_id,omitempty"`
+	SKU          *string            `json:"sku"`
+	Kind         RecommendationKind `json:"recommendation_kind"`
+	FamilyID     *string            `json:"family_id"`
+	Title        string             `json:"title"`
+	URL          *string            `json:"url,omitempty"`
+	Price        *float64           `json:"price,omitempty"`
+	CurrencyCode *string            `json:"currency_code,omitempty"`
+	Category     *string            `json:"category,omitempty"`
+	Score        float64            `json:"score"`
+	Explanation  string             `json:"explanation"`
+	Variants     []Variant          `json:"variants"`
+	EvidenceIDs  []string           `json:"evidence_ids"`
 }

@@ -15,6 +15,14 @@ make run
 
 Во втором терминале запустите `npm ci` и `npm run dev` из `frontend-softline`. Откройте `http://localhost:5173/#/demo`, выберите HTTP и профиль. Сценарий покупки и браузерные команды есть в [инструкции демо](docs/demo/README.md).
 
+Материалы демо:
+
+- Как поднять стенд по шагам — [HANDOFF платформы](tests/e2e/platform/HANDOFF.md).
+- Числа A/B, доля вариантов и дата фида — [metrics.json](docs/demo/metrics.json).
+- Лицензии и версии зависимостей — [THIRD_PARTY.md](THIRD_PARTY.md).
+- Офлайн- и онлайн-смета — [docs/demo/cost.md](docs/demo/cost.md).
+- Сценарий ролика и список кадров — [docs/demo/video.md](docs/demo/video.md).
+
 ## Офлайн-публикация
 
 На отдельной синтетической БД с применёнными миграциями выполните:

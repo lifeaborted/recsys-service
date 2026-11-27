@@ -5,6 +5,7 @@ interface DemoRecommendationCardProps {
   item: Recommendation;
   edges: GraphEdge[];
   onPurchase: (itemId: string) => void;
+  onShowGraph: () => void;
   busy: boolean;
 }
 
@@ -45,13 +46,22 @@ function evidenceURL(edge: GraphEdge): string | null {
   }
 }
 
-export function DemoRecommendationCard({ item, edges, onPurchase, busy }: DemoRecommendationCardProps) {
+export function DemoRecommendationCard({ item, edges, onPurchase, onShowGraph, busy }: DemoRecommendationCardProps) {
   const [showVariants, setShowVariants] = useState(false);
   const [showReason, setShowReason] = useState(false);
 
+  const verification = item.verification === "requires_check"
+    ? { label: "требует проверки", className: "demo-card__verification demo-card__verification_check" }
+    : item.verification === "confirmed"
+      ? { label: "подтверждено", className: "demo-card__verification demo-card__verification_confirmed" }
+      : null;
+
   return (
-    <article className="demo-card">
-      <span className="demo-card__kind">{KIND_LABELS[item.recommendation_kind]}</span>
+    <article className={`demo-card${item.verification === "requires_check" ? " demo-card_requires-check" : ""}`}>
+      <div className="demo-card__badges">
+        <span className="demo-card__kind">{KIND_LABELS[item.recommendation_kind]}</span>
+        {verification ? <span className={verification.className}>{verification.label}</span> : null}
+      </div>
       <h3 className="demo-card__title">{item.title}</h3>
       <p className="demo-card__explanation">{item.explanation}</p>
       {item.url ? (
@@ -61,6 +71,13 @@ export function DemoRecommendationCard({ item, edges, onPurchase, busy }: DemoRe
       ) : (
         <span className="demo-card__link">Ссылка недоступна</span>
       )}
+
+      <a
+        className="demo-card__detail-link"
+        href={`#/demo-product?item=${encodeURIComponent(item.item_id)}`}
+      >
+        Полная информация о товаре →
+      </a>
 
       {item.variants.length > 0 ? (
         <div className="demo-card__section">
@@ -104,9 +121,14 @@ export function DemoRecommendationCard({ item, edges, onPurchase, busy }: DemoRe
 
       {edges.length > 0 ? (
         <div className="demo-card__section">
-          <button className="clone-link-btn" type="button" onClick={() => setShowReason((value) => !value)}>
-            {showReason ? "Скрыть причину" : "Почему рекомендуем"}
-          </button>
+          <div className="demo-card__explain-actions">
+            <button className="clone-link-btn clone-link-btn_primary" type="button" onClick={onShowGraph}>
+              Показать граф
+            </button>
+            <button className="clone-link-btn" type="button" onClick={() => setShowReason((value) => !value)}>
+              {showReason ? "Скрыть причину" : "Почему рекомендуем"}
+            </button>
+          </div>
           {showReason ? (
             <div style={{ marginTop: 10 }}>
               {edges.map((edge) => {

@@ -234,6 +234,7 @@ type CatalogProduct struct {
 	Price        *float64      `json:"price,omitempty"`
 	CurrencyCode *string       `json:"currency_code,omitempty"`
 	Available    bool          `json:"available"`
+	HasHistory   bool          `json:"has_history"`
 	URL          *string       `json:"url,omitempty"`
 }
 

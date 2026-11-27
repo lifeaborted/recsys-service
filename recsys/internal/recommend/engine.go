@@ -71,6 +71,10 @@ func (e *Engine) Recommend(ctx context.Context, q contract.RecommendationQuery) 
 	if q.Mode != contract.Online && q.Mode != contract.Backtest || q.ClientID == "" || q.Mode == contract.Backtest && q.SnapshotID == "" {
 		return zero, fmt.Errorf("invalid recommendation query")
 	}
+	want := cardLimit(q.Mode)
+	if q.Mode == contract.Online && q.Limit > 0 {
+		want = min(q.Limit, want)
+	}
 	s, err := e.reader.SnapshotInfo(ctx, q.SnapshotID)
 	if err != nil {
 		return zero, fmt.Errorf("snapshot: %w", err)
@@ -117,7 +121,7 @@ func (e *Engine) Recommend(ctx context.Context, q contract.RecommendationQuery) 
 	cards := map[domain.ItemID]Product{}
 	owned := slices.Clone(ids)
 	similarSeen := false
-	for limit := 64; ; limit *= 2 {
+	for poolLimit := 64; ; poolLimit *= 2 {
 		if err := ctx.Err(); err != nil {
 			return zero, err
 		}
@@ -128,11 +132,11 @@ func (e *Engine) Recommend(ctx context.Context, q contract.RecommendationQuery) 
 			collectSimilar(ctx, e.reader, s.ID, owned, bought, best, pending)
 		}
 		for _, p := range active {
-			rows, err := e.reader.Candidates(ctx, s.ID, p.key, limit)
+			rows, err := e.reader.Candidates(ctx, s.ID, p.key, poolLimit)
 			if err != nil {
 				return zero, fmt.Errorf("candidate pool %s: %w", p.key.Signal, err)
 			}
-			if len(rows) == limit {
+			if len(rows) == poolLimit {
 				more = append(more, p)
 			}
 			for _, c := range rows {
@@ -188,13 +192,13 @@ func (e *Engine) Recommend(ctx context.Context, q contract.RecommendationQuery) 
 		if q.Mode == contract.Online {
 			ordered = rerankOnline(ctx, e.reranker, ordered, cards, products)
 		}
-		result := render(s.ID, q.Mode, ordered, cards)
+		result := render(s.ID, q.Mode, ordered, cards, want)
 		if len(more) == 0 {
 			return result, nil
 		}
 		// A truncated higher-priority pool may still displace a fallback card.
-		if len(result.Items) == cardLimit(q.Mode) {
-			lastTier := best[result.Items[len(result.Items)-1].ItemID].tier
+		if len(result.Items) == want {
+			lastTier := best[result.Items[want-1].ItemID].tier
 			active = nil
 			for _, p := range more {
 				if p.tier >= lastTier {

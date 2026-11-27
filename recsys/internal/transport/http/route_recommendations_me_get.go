@@ -2,6 +2,7 @@ package transporthttp
 
 import (
 	"net/http"
+	"strconv"
 
 	"recsys/internal/auth"
 	"recsys/internal/contract"
@@ -20,9 +21,20 @@ func (s *Server) handleGetRecommendationsMe(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	limit := 0
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil || parsed < 1 || parsed > 36 {
+			respond.Error(w, r, http.StatusBadRequest, "invalid_limit", "limit must be an integer between 1 and 36")
+			return
+		}
+		limit = parsed
+	}
+
 	res, err := s.recommender.Recommend(r.Context(), contract.RecommendationQuery{
 		ClientID: profile.ClientID,
 		Mode:     contract.Online,
+		Limit:    limit,
 	})
 	if err != nil {
 		respond.Error(w, r, http.StatusInternalServerError, "recommendation_failed", "Failed to compute recommendations")

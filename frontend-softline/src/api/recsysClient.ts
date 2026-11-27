@@ -6,6 +6,7 @@ import emptyExample from "./examples/recommendations.empty.json";
 import errorExample from "./examples/recommendations.error.json";
 import fullExample from "./examples/recommendations.full.json";
 import partialExample from "./examples/recommendations.partial.json";
+import verifiedExample from "./examples/recommendations.verified.json";
 import type {
   DemoScenario,
   MeResponse,
@@ -39,6 +40,7 @@ const examples: Record<string, Recommendations> = {
   full: fullExample as Recommendations,
   partial: partialExample as Recommendations,
   empty: emptyExample as Recommendations,
+  check: verifiedExample as Recommendations,
 };
 
 function delay(ms: number, signal?: AbortSignal): Promise<void> {
@@ -61,6 +63,7 @@ function delay(ms: number, signal?: AbortSignal): Promise<void> {
 
 function scenarioFor(scenario: DemoScenario, profileId: string): string {
   if (scenario !== "auto") return scenario;
+  if (profileId === "u3") return "check";
   return profileId === "u2" ? "partial" : "full";
 }
 

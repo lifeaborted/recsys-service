@@ -127,6 +127,39 @@ export async function mockRecommendations(
   };
 }
 
+/**
+ * Публичный OpenAPI не принимает scenario и user_id: выдача привязана к Bearer-сессии.
+ * Чтобы селекторы на старых экранах работали, применяем сценарий и лимит на клиенте.
+ * Пользователь при этом меняется реальным входом в другой синтетический аккаунт.
+ */
+export function applyLiveScenario(
+  response: RecommendationResponse,
+  params: { userId: string; scenario: Scenario; limit: number },
+): RecommendationResponse {
+  const limit = Math.max(1, params.limit);
+  if (params.scenario === "demo") {
+    const items = response.items.slice(0, limit);
+    return { ...response, items, total: items.length };
+  }
+
+  const random = mulberry32(hashString(`${params.userId}:${params.scenario}`));
+  const reasons = SCENARIO_REASONS[params.scenario];
+  const items = response.items
+    .map((item) => ({
+      ...item,
+      reason: reasons[Math.floor(random() * reasons.length)] ?? item.reason,
+    }))
+    .sort((left, right) => right.score - left.score)
+    .slice(0, limit);
+
+  return {
+    ...response,
+    model_version: SCENARIO_MODEL[params.scenario],
+    items,
+    total: items.length,
+  };
+}
+
 export async function mockFeedback(payload: FeedbackPayload): Promise<FeedbackResponse> {
   await delay(120);
   return {

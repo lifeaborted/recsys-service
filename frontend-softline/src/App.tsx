@@ -3,6 +3,7 @@ import { AppShell } from "./components/AppShell";
 import { parseRoute, type RouteKey } from "./lib/routes";
 import { CatalogPage } from "./pages/CatalogPage";
 import { DemoPage } from "./pages/DemoPage";
+import { DemoProductPage } from "./pages/DemoProductPage";
 import { InvoicesPage, KeysPage, NotificationsPage, OrdersPage, StaticPage } from "./pages/TablesPage";
 import { OverviewPage } from "./pages/OverviewPage";
 import { ProfilePage } from "./pages/ProfilePage";
@@ -17,6 +18,8 @@ function Page({ route }: { route: RouteKey }) {
       return <OverviewPage />;
     case "demo":
       return <DemoPage />;
+    case "demo-product":
+      return <DemoProductPage />;
     case "recommendations":
       return <RecommendationsPage />;
     case "catalog":

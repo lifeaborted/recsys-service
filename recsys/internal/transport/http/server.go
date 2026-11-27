@@ -36,6 +36,7 @@ type ProductDTO struct {
 	Price        *float64      `json:"price,omitempty"`
 	CurrencyCode *string       `json:"currency_code,omitempty"`
 	Available    bool          `json:"available"`
+	HasHistory   bool          `json:"has_history"`
 	URL          *string       `json:"url,omitempty"`
 }
 
@@ -56,6 +57,26 @@ type CatalogStore interface {
 	ListProducts(ctx context.Context, limit int) ([]ProductDTO, error)
 }
 
+// StatsStore reads table row counts for GET /api/v1/stats.
+type StatsStore interface {
+	TableStats(ctx context.Context) (map[string]int64, error)
+}
+
+// ProductPageStore is an optional paged catalog reader for GET /api/v1/products.
+type ProductPageStore interface {
+	ListProductsPage(ctx context.Context, limit, offset int, query string, withHistory bool) ([]ProductDTO, int64, error)
+}
+
+// ScoreHistoryStore reads the average score timeline for one item.
+type ScoreHistoryStore interface {
+	ScoreHistory(ctx context.Context, itemID string) (contract.ScoreHistory, error)
+}
+
+// ProductDetailStore reads the full catalog card for GET /api/v1/products/{itemID}.
+type ProductDetailStore interface {
+	ProductDetail(ctx context.Context, itemID string) (contract.ProductDetail, error)
+}
+
 // PurchaseResult describes a persisted profile purchase.
 type PurchaseResult struct {
 	OrderID string        `json:"order_id"`
@@ -74,6 +95,10 @@ type Config struct {
 	Health         HealthChecker
 	Catalog        CatalogStore
 	CatalogMeta    CatalogMetaReader
+	ProductDetails ProductDetailStore
+	ScoreHistory   ScoreHistoryStore
+	Stats          StatsStore
+	Runs           contract.RunsStore
 	Purchases      PurchaseStore
 	Recommender    contract.Recommender
 	Logger         *slog.Logger
@@ -83,16 +108,20 @@ type Config struct {
 
 // Server dispatches OpenAPI routes under /api/v1 and Swagger UI under /swagger/.
 type Server struct {
-	auth        *auth.Service
-	health      HealthChecker
-	catalog     CatalogStore
-	catalogMeta CatalogMetaReader
-	purchases   PurchaseStore
-	recommender contract.Recommender
-	log         *slog.Logger
-	openAPISpec []byte
-	timeout     time.Duration
-	handler     http.Handler
+	auth           *auth.Service
+	health         HealthChecker
+	catalog        CatalogStore
+	catalogMeta    CatalogMetaReader
+	productDetails ProductDetailStore
+	scoreHistory   ScoreHistoryStore
+	stats          StatsStore
+	runs           contract.RunsStore
+	purchases      PurchaseStore
+	recommender    contract.Recommender
+	log            *slog.Logger
+	openAPISpec    []byte
+	timeout        time.Duration
+	handler        http.Handler
 }
 
 // NewServer constructs an http.Handler implementing all 7 OpenAPI operations and /swagger/.
@@ -107,15 +136,19 @@ func NewServer(cfg Config) *Server {
 	}
 
 	s := &Server{
-		auth:        cfg.Auth,
-		health:      cfg.Health,
-		catalog:     cfg.Catalog,
-		catalogMeta: cfg.CatalogMeta,
-		purchases:   cfg.Purchases,
-		recommender: cfg.Recommender,
-		log:         log,
-		openAPISpec: append([]byte(nil), cfg.OpenAPISpec...),
-		timeout:     timeout,
+		auth:           cfg.Auth,
+		health:         cfg.Health,
+		catalog:        cfg.Catalog,
+		catalogMeta:    cfg.CatalogMeta,
+		productDetails: cfg.ProductDetails,
+		scoreHistory:   cfg.ScoreHistory,
+		stats:          cfg.Stats,
+		runs:           cfg.Runs,
+		purchases:      cfg.Purchases,
+		recommender:    cfg.Recommender,
+		log:            log,
+		openAPISpec:    append([]byte(nil), cfg.OpenAPISpec...),
+		timeout:        timeout,
 	}
 
 	mux := http.NewServeMux()
@@ -126,6 +159,12 @@ func NewServer(cfg Config) *Server {
 	mux.HandleFunc("POST /api/v1/auth/login", s.handlePostAuthLogin)
 	mux.HandleFunc("GET /api/v1/users/me", s.requireSession(s.rejectProfileOverride(s.handleGetUsersMe)))
 	mux.HandleFunc("GET /api/v1/products", s.requireSession(s.rejectProfileOverride(s.handleGetProducts)))
+	mux.HandleFunc("GET /api/v1/products/{itemID}", s.requireSession(s.rejectProfileOverride(s.handleGetProductDetail)))
+	mux.HandleFunc("GET /api/v1/products/{itemID}/score-history", s.requireSession(s.rejectProfileOverride(s.handleGetScoreHistory)))
+	mux.HandleFunc("GET /api/v1/stats", s.requireSession(s.rejectProfileOverride(s.handleGetStats)))
+	mux.HandleFunc("POST /api/v1/runs", s.requireSession(s.rejectProfileOverride(s.handlePostRuns)))
+	mux.HandleFunc("GET /api/v1/runs", s.requireSession(s.rejectProfileOverride(s.handleGetRuns)))
+	mux.HandleFunc("POST /api/v1/events", s.requireSession(s.rejectProfileOverride(s.handlePostEvents)))
 	mux.HandleFunc("POST /api/v1/purchases", s.requireSession(s.rejectProfileOverride(s.handlePostPurchases)))
 	mux.HandleFunc("GET /api/v1/recommendations/me", s.requireSession(s.rejectProfileOverride(s.handleGetRecommendationsMe)))
 

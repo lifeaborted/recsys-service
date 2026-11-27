@@ -8,7 +8,7 @@ import { useSettings } from "../state/settings";
 export function OverviewPage() {
   const reco = useCloneRecommendations();
   const { showScores } = useDebug();
-  const { settings } = useSettings();
+  const { settings, update } = useSettings();
 
   return (
     <div className="home-page">
@@ -20,6 +20,18 @@ export function OverviewPage() {
       <div className="flex-column gap-16">
         <div className="reco-heading-row">
           <span className="heading-xl sl-color-text">Вам может подойти</span>
+          <label className="reco-limit">
+            Показать{" "}
+            <select
+              aria-label="Количество рекомендаций"
+              value={settings.limit}
+              onChange={(event) => update({ limit: Number(event.target.value) })}
+            >
+              {[1, 2, 3, 4, 5, 6, 9, 12, 24, 36].map((value) => (
+                <option key={value} value={value}>{value}</option>
+              ))}
+            </select>
+          </label>
           <span className="reco-chip">
             {settings.mockMode ? "mock" : "live"} · {settings.scenario} ·{" "}
             {reco.data?.items.length ?? 0} товаров

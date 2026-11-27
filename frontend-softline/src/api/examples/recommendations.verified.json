@@ -1,0 +1,62 @@
+{
+  "request_id": "demo-check-1",
+  "snapshot_id": "demo-v1",
+  "partial_reason": null,
+  "items": [
+    {
+      "item_id": "DEMO-UPGRADE",
+      "offer_id": "demo-offer-upgrade",
+      "sku": "DEMO-UPG",
+      "recommendation_kind": "upgrade",
+      "family_id": "DEMO-SUITE",
+      "title": "Апгрейд редакции",
+      "url": "https://store.softline.ru/demo/upgrade",
+      "explanation": "Старшая редакция совместима с текущей и доступна в текущем фиде.",
+      "variants": [],
+      "evidence_ids": ["demo-check-upgrade"],
+      "verification": "confirmed"
+    },
+    {
+      "item_id": "DEMO-COMPLEMENT-CHECK",
+      "offer_id": "demo-offer-complement-check",
+      "sku": "DEMO-COMP-CHECK",
+      "recommendation_kind": "complement",
+      "family_id": "DEMO-SUITE",
+      "title": "Дополнительный модуль",
+      "url": "https://store.softline.ru/demo/complement-check",
+      "explanation": "Модуль подходит по семейству, но совместимость требует проверки перед покупкой.",
+      "variants": [],
+      "evidence_ids": ["demo-check-complement"],
+      "verification": "requires_check"
+    }
+  ],
+  "graph": {
+    "nodes": [
+      {"id": "family:DEMO-SUITE", "type": "family", "label": "Семейство DEMO-SUITE"},
+      {"id": "item:DEMO-UPGRADE", "type": "product", "label": "Апгрейд редакции"},
+      {"id": "item:DEMO-COMPLEMENT-CHECK", "type": "product", "label": "Дополнительный модуль"}
+    ],
+    "edges": [
+      {
+        "id": "demo-check-upgrade",
+        "from": "family:DEMO-SUITE",
+        "to": "item:DEMO-UPGRADE",
+        "type": "upgrade",
+        "weight": 0.86,
+        "reason": "Старшая редакция совместима с текущей по данным фида.",
+        "source": "synthetic-feed-1",
+        "snapshot_id": "demo-v1"
+      },
+      {
+        "id": "demo-check-complement",
+        "from": "family:DEMO-SUITE",
+        "to": "item:DEMO-COMPLEMENT-CHECK",
+        "type": "complement",
+        "weight": 0.62,
+        "reason": "Семейство совпадает, но совместимость требует проверки.",
+        "source": "synthetic-feed-2",
+        "snapshot_id": "demo-v1"
+      }
+    ]
+  }
+}

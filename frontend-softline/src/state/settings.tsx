@@ -9,7 +9,7 @@ import {
 import type { Scenario } from "../api/types";
 import { readJson, removeKey, writeJson } from "../lib/storage";
 
-const STORAGE_KEY = "recsys-portal.settings.v3";
+const STORAGE_KEY = "recsys-portal.settings.v4";
 
 export interface Settings {
   userId: string;
@@ -25,7 +25,7 @@ export const DEFAULT_SETTINGS: Settings = {
   userId: "u1",
   baseUrl: import.meta.env.VITE_RECSYS_BASE_URL ?? "/api",
   token: "",
-  mockMode: true,
+  mockMode: false,
   scenario: "demo",
   limit: 9,
   timeoutMs: 8000,

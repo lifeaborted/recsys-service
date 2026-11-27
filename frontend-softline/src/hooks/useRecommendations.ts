@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { RecsysError, fetchRecommendations } from "../api/client";
-import { mockRecommendations } from "../api/mock";
+import { applyLiveScenario, mockRecommendations } from "../api/mock";
 import type { RecommendationResponse, Scenario } from "../api/types";
 import { useSettings } from "../state/settings";
 
@@ -48,7 +48,8 @@ export function useRecommendations({
   const normalizedUser = userId.trim();
 
   useEffect(() => {
-    if (!enabled || !normalizedUser) {
+    if (!enabled || !normalizedUser || (!mockMode && !token)) {
+      // В live-режиме ждём Bearer-токен из сессии, чтобы не слать 401.
       setState(INITIAL_STATE);
       return;
     }
@@ -57,7 +58,7 @@ export function useRecommendations({
     const startedAt = performance.now();
     const requestUrl = mockMode
       ? "mock://recommendations"
-      : `${baseUrl.replace(/\/+$/, "")}/recommendations`;
+      : `${baseUrl.replace(/\/+$/, "")}/recommendations/me`;
 
     setState((previous) => ({
       status: "loading",
@@ -70,9 +71,12 @@ export function useRecommendations({
       try {
         const data = mockMode
           ? await mockRecommendations({ userId: normalizedUser, limit, scenario })
-          : await fetchRecommendations(
-              { baseUrl, token, timeoutMs },
-              { userId: normalizedUser, limit, scenario, signal: controller.signal },
+          : applyLiveScenario(
+              await fetchRecommendations(
+                { baseUrl, token, timeoutMs },
+                { userId: normalizedUser, limit, scenario, signal: controller.signal },
+              ),
+              { userId: normalizedUser, scenario, limit },
             );
 
         if (controller.signal.aborted) return;

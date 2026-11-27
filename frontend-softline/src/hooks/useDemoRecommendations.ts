@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, getRecommendations } from "../api/recsysClient";
 import type { Recommendations } from "../api/recsysTypes";
 import { useSession } from "../state/session";
@@ -24,6 +24,9 @@ export function useDemoRecommendations(): DemoRecommendationsState {
   const [requestId, setRequestId] = useState<string | null>(null);
   const [elapsedMs, setElapsedMs] = useState<number | null>(null);
   const [nonce, setNonce] = useState(0);
+  // Последний рестарт API делает старый Bearer-токен недействительным:
+  // перелогиниваемся один раз, чтобы экран восстановился сам.
+  const retriedProfiles = useRef(new Set<string>());
 
   const refresh = useCallback(() => setNonce((value) => value + 1), []);
 
@@ -72,6 +75,15 @@ export function useDemoRecommendations(): DemoRecommendationsState {
                 "client-error",
                 "client_error",
               );
+        if (
+          apiError.status === 401 &&
+          session.transport === "http" &&
+          !retriedProfiles.current.has(profile.id)
+        ) {
+          retriedProfiles.current.add(profile.id);
+          session.logout();
+          return;
+        }
         setError(apiError);
         setRequestId(apiError.requestId);
         setElapsedMs(Math.round(performance.now() - started));
@@ -86,6 +98,7 @@ export function useDemoRecommendations(): DemoRecommendationsState {
     session.transport,
     session.scenario,
     session.generation,
+    session.logout,
     nonce,
   ]);
 
