@@ -42,15 +42,15 @@ func (s *Store) ProductDetail(ctx context.Context, itemID string) (contract.Prod
 		JOIN recommendations.catalog_offers o ON o.offer_id = f.offer_id
 		LEFT JOIN recommendations.catalog_categories c ON c.category_id = o.category_id
 		LEFT JOIN recommendations.catalog_vendors v ON v.vendor_id = o.vendor_id
-		WHERE f.item_id = $1
+		WHERE f.item_id = $1 AND (NOT $3 OR f.available)
 		LIMIT 1
-	`, itemID, s.onlineSnapshot).Scan(
+	`, itemID, s.onlineSnapshot, s.closedPreview).Scan(
 		&out.ItemID, &out.OfferID, &out.SKU, &out.Title, &out.Category, &out.Vendor,
 		&out.Price, &out.OldPrice, &out.CurrencyCode, &out.Available, &out.URL,
 		&out.Description, &out.PictureURL, &out.VendorURL, &out.Delivery, &out.Pickup,
 		&out.SalesNotes, &params,
 	)
-	if errors.Is(err, pgx.ErrNoRows) {
+	if errors.Is(err, pgx.ErrNoRows) && !s.closedPreview {
 		err = s.pool.QueryRow(ctx, `
 			SELECT COALESCE(o.vendor_code, o.offer_id),
 			       o.offer_id,

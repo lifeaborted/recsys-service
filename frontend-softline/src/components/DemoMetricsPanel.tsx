@@ -23,18 +23,21 @@ export function DemoMetricsPanel({
       </div>
 
       <div className="demo-quality__scroll">
-        <table className="demo-quality__table">
+        <table className="demo-quality__table demo-quality__table_baseline">
+          <colgroup><col className="demo-quality__method-col" /></colgroup>
+          <colgroup span={3} />
+          <colgroup span={3} />
           <thead>
             <tr>
               <th rowSpan={2} scope="col">Метод</th>
               <th colSpan={3} scope="colgroup">Когорта A</th>
-              <th colSpan={3} scope="colgroup">Когорта B</th>
+              <th className="demo-quality__cohort-divider" colSpan={3} scope="colgroup">Когорта B</th>
             </tr>
             <tr>
               <th scope="col">все</th>
               <th scope="col">B2B</th>
               <th scope="col">B2C</th>
-              <th scope="col">все</th>
+              <th className="demo-quality__cohort-divider" scope="col">все</th>
               <th scope="col">B2B</th>
               <th scope="col">B2C</th>
             </tr>
@@ -46,7 +49,7 @@ export function DemoMetricsPanel({
                 <td>{percent(row.A.all)}</td>
                 <td>{percent(row.A.B2B)}</td>
                 <td>{percent(row.A.B2C)}</td>
-                <td>{percent(row.B.all)}</td>
+                <td className="demo-quality__cohort-divider">{percent(row.B.all)}</td>
                 <td>{percent(row.B.B2B)}</td>
                 <td>{percent(row.B.B2C)}</td>
               </tr>

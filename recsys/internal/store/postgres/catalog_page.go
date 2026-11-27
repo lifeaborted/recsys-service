@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"recsys/internal/domain"
@@ -29,6 +30,13 @@ func (s *Store) ListProductsPage(ctx context.Context, limit, offset int, query s
 		dataParts = append(dataParts, "(sc.name ILIKE '%' || $3 || '%' OR COALESCE(sc.vendor_code, '') ILIKE '%' || $3 || '%')")
 		countArgs = append(countArgs, query)
 		dataArgs = append(dataArgs, query)
+	}
+	if s.closedPreview {
+		const scope = "EXISTS (SELECT 1 FROM recommendations.model_snapshots m JOIN recommendations.item_feature_versions f USING(feature_version) WHERE m.snapshot_id = $%d AND f.available AND f.offer_id=sc.offer_id AND f.item_id=hio.item_id)"
+		countParts = append(countParts, fmt.Sprintf(scope, len(countArgs)+1))
+		dataParts = append(dataParts, fmt.Sprintf(scope, len(dataArgs)+1))
+		countArgs = append(countArgs, s.onlineSnapshot)
+		dataArgs = append(dataArgs, s.onlineSnapshot)
 	}
 	if withHistory {
 		countParts = append(countParts, "EXISTS (SELECT 1 FROM recommendations.recommendation_items ri WHERE ri.source_item_id = COALESCE(hio.item_id, sc.offer_id))")

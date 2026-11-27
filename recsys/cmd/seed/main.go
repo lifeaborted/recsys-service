@@ -16,20 +16,24 @@ func main() {
 	migrationsDir := flag.String("migrations-dir", "", "override migrations directory")
 	allowOnV4 := flag.Bool("allow-on-v4", false, "allow seeding onto a database containing dataset v4")
 	previewAccounts := flag.Bool("preview-accounts", false, "configure guest and four accounts in a synthetic preview database")
+	previewCatalog := flag.Bool("preview-catalog", false, "expand only the catalog of a dedicated synthetic preview database")
 	flag.Parse()
 
-	if err := run(*migrateFirst, *migrationsDir, *allowOnV4, *previewAccounts); err != nil {
+	if err := run(*migrateFirst, *migrationsDir, *allowOnV4, *previewAccounts, *previewCatalog); err != nil {
 		fmt.Fprintln(os.Stderr, "seed:", err)
 		os.Exit(1)
 	}
 }
 
-func run(migrateFirst bool, migrationsDirOverride string, allowOnV4, previewAccounts bool) error {
+func run(migrateFirst bool, migrationsDirOverride string, allowOnV4, previewAccounts, previewCatalog bool) error {
+	if previewAccounts && previewCatalog {
+		return fmt.Errorf("choose either -preview-accounts or -preview-catalog")
+	}
 	cfg := config.Load()
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
-	store, err := postgres.OpenContext(ctx, cfg.DatabaseURL)
+	store, err := postgres.OpenContext(ctx, cfg.DatabaseURL, postgres.WithOnlineSources(os.Getenv("RECSYS_ONLINE_SNAPSHOT"), ""), postgres.WithClosedPreview(os.Getenv("RECSYS_CLOSED_PREVIEW") == "1"))
 	if err != nil {
 		return err
 	}
@@ -45,6 +49,10 @@ func run(migrateFirst bool, migrationsDirOverride string, allowOnV4, previewAcco
 			return fmt.Errorf("migrate: %w", err)
 		}
 		fmt.Fprintf(os.Stdout, "migrations ready (version=%s)\n", ver)
+	}
+
+	if previewCatalog {
+		return store.ExpandDemoCatalog(ctx)
 	}
 
 	if previewAccounts {

@@ -43,6 +43,7 @@ type Store struct {
 	minVersion     string
 	onlineSnapshot string
 	embeddingModel string
+	closedPreview  bool
 }
 
 // Option customizes a Store instance.
@@ -63,6 +64,11 @@ func WithOnlineSources(snapshot, embeddingModel string) Option {
 		s.onlineSnapshot = strings.TrimSpace(snapshot)
 		s.embeddingModel = strings.TrimSpace(embeddingModel)
 	}
+}
+
+// WithClosedPreview scopes catalog and sign-in to the protected v5 preview.
+func WithClosedPreview(enabled bool) Option {
+	return func(s *Store) { s.closedPreview = enabled }
 }
 
 // NewPool creates and configures a pgxpool.Pool.

@@ -545,7 +545,14 @@ func (s *Store) Profile(ctx context.Context, clientID domain.ClientID) (domain.C
 // History returns purchases for clientID. A zero throughWeek reads full current history
 // (historical sales plus isolated online profile purchases); non-zero filters inclusively by week.
 func (s *Store) History(ctx context.Context, clientID domain.ClientID, throughWeek time.Time) ([]domain.Sale, error) {
-	if _, item, ok := previewScenario(clientID); ok && throughWeek.IsZero() {
+	if template, item, ok := previewScenario(clientID); ok && throughWeek.IsZero() {
+		if s.closedPreview {
+			var err error
+			item, err = closedPreviewSeed(ctx, s.pool, template)
+			if err != nil {
+				return nil, err
+			}
+		}
 		if item == "" {
 			return []domain.Sale{}, nil
 		}

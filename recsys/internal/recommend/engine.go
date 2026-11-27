@@ -111,9 +111,14 @@ func (e *Engine) Recommend(ctx context.Context, q contract.RecommendationQuery) 
 		return zero, fmt.Errorf("history products: %w", err)
 	}
 	platforms := map[string]bool{}
+	ownedOffers := map[string]bool{}
 	for _, id := range ids {
-		if p := products[id].Platform; p != "" {
-			platforms[p] = true
+		product := products[id]
+		if product.Platform != "" {
+			platforms[product.Platform] = true
+		}
+		if product.OfferID != nil {
+			ownedOffers[*product.OfferID] = true
 		}
 	}
 	active := pools(client, ids, q.Mode)
@@ -183,7 +188,11 @@ func (e *Engine) Recommend(ctx context.Context, q contract.RecommendationQuery) 
 		}
 		var ordered []ranked
 		for id, r := range best {
-			if !eligible(cards[id], client, platforms, q.Mode) {
+			product := cards[id]
+			if !eligible(product, client, platforms, q.Mode) {
+				continue
+			}
+			if q.Mode == contract.Online && product.OfferID != nil && ownedOffers[*product.OfferID] {
 				continue
 			}
 			if q.Mode == contract.Online && r.kind == domain.Renewal {

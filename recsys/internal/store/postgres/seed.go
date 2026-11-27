@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"crypto/sha256"
+	_ "embed"
 	"encoding/hex"
 	"fmt"
 	"strings"
@@ -291,5 +292,27 @@ func (s *Store) SeedDemo(ctx context.Context, opts SeedOptions) error {
 			},
 		},
 	}
-	return s.PublishSnapshot(ctx, snap)
+	if err := s.PublishSnapshot(ctx, snap); err != nil {
+		return err
+	}
+	if opts.AllowOnV4 {
+		return nil
+	}
+	return s.ExpandDemoCatalog(ctx)
+}
+
+//go:embed demo_catalog_expansion.sql
+var demoCatalogExpansionSQL string
+
+// ExpandDemoCatalog adds complementary offers without rotating demo accounts or touching purchases.
+func (s *Store) ExpandDemoCatalog(ctx context.Context) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	if _, err := tx.Exec(ctx, demoCatalogExpansionSQL); err != nil {
+		return fmt.Errorf("expand synthetic catalog: %w", err)
+	}
+	return tx.Commit(ctx)
 }

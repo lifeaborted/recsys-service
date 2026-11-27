@@ -6,6 +6,7 @@ import (
 
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"recsys/internal/contract"
@@ -41,7 +42,19 @@ SELECT EXISTS(SELECT 1 FROM recommendations.model_snapshots WHERE snapshot_id='d
     AND NOT EXISTS(SELECT 1 FROM recommendations.sales)`).Scan(&synthetic); err != nil {
 		return err
 	}
-	if !synthetic {
+	if s.closedPreview {
+		var isClosed bool
+		err := tx.QueryRow(ctx, `
+			SELECT EXISTS (SELECT 1 FROM recommendations.model_snapshots
+			 WHERE snapshot_id=$1 AND dataset_version='v5' AND catalog_version<>'')
+		`, s.onlineSnapshot).Scan(&isClosed)
+		if err != nil {
+			return err
+		}
+		if !isClosed {
+			return fmt.Errorf("closed preview requires a pinned online v5 snapshot")
+		}
+	} else if !synthetic {
 		return fmt.Errorf("preview accounts require a synthetic database with demo-v1")
 	}
 	if _, err := tx.Exec(ctx, `
@@ -67,6 +80,9 @@ WHERE (client_id='DEMO-BUYER' AND login IN ('demo-b2b','verb2b'))
 		clientType := "ФЛ"
 		if account.group == "B2B" {
 			clientType = "ЮЛ"
+			if s.closedPreview {
+				clientType = "коммерческая"
+			}
 		}
 		if _, err := tx.Exec(ctx, `
 INSERT INTO recommendations.clients(excel_row,client_id,client_group,client_type,lk_access)
@@ -92,6 +108,34 @@ RETURNING account_id
 		}
 		if _, err := tx.Exec(ctx, "DELETE FROM recommendations.stand_sessions WHERE account_id=$1", id); err != nil {
 			return err
+		}
+		if s.closedPreview && (account.login == "verb2b" || account.login == "verb2c") {
+			existing, err := closedPreviewSeed(ctx, tx, domain.ClientID(account.client))
+			if err != nil {
+				return err
+			}
+			if existing == "" {
+				var item string
+				err = tx.QueryRow(ctx, `
+					SELECT f.item_id
+					FROM recommendations.model_snapshots m
+					JOIN recommendations.item_feature_versions f USING(feature_version)
+					JOIN recommendations.snapshot_candidates c ON c.snapshot_id=m.snapshot_id AND c.item_id=f.item_id
+					WHERE m.snapshot_id=$1 AND f.available AND f.audience=$2
+					  AND c.signal='popularity' AND c.client_group=$2 AND c.client_type='' AND c.industry='' AND c.segment=''
+					  AND (f.organization_type IN ('','не определено') OR
+					       ($2='B2B' AND f.organization_type='коммерческая') OR
+					       ($2='B2C' AND f.organization_type='для дома'))
+					ORDER BY c.rank, f.item_id
+					LIMIT 1
+				`, s.onlineSnapshot, account.group).Scan(&item)
+				if err != nil {
+					return fmt.Errorf("find starting item for %s: %w", account.login, err)
+				}
+				if _, err := createPurchase(ctx, tx, domain.ClientID(account.client), item, time.Now().UTC()); err != nil {
+					return fmt.Errorf("seed starting purchase: %w", err)
+				}
+			}
 		}
 	}
 	return tx.Commit(ctx)
@@ -130,4 +174,20 @@ func previewScenario(clientID domain.ClientID) (domain.ClientID, domain.ItemID, 
 	default:
 		return "", "", false
 	}
+}
+
+type previewSeedQueryer interface {
+	QueryRow(context.Context, string, ...any) pgx.Row
+}
+
+func closedPreviewSeed(ctx context.Context, db previewSeedQueryer, template domain.ClientID) (domain.ItemID, error) {
+	var item domain.ItemID
+	err := db.QueryRow(ctx, `
+		SELECT item_id FROM recommendations.online_purchases
+		WHERE client_id=$1 ORDER BY purchase_id LIMIT 1
+	`, template).Scan(&item)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", nil
+	}
+	return item, err
 }

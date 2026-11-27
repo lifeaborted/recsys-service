@@ -350,6 +350,33 @@ func TestOnlineRerankRunsOnceAfterPoolExpansion(t *testing.T) {
 	}
 }
 
+func TestOnlineDoesNotRecommendOwnedOfferUnderAnotherItemID(t *testing.T) {
+	reader := &memory{
+		client:  domain.Client{ID: "u", Group: domain.B2B},
+		cutoff:  time.Date(2026, 8, 31, 0, 0, 0, 0, time.UTC),
+		history: []domain.Sale{{ItemID: "owned"}},
+		products: map[domain.ItemID]Product{
+			"owned": {OfferID: offerID("same-offer")},
+			"alias": {OfferID: offerID("same-offer"), InSales: true, Available: true},
+			"other": {OfferID: offerID("other-offer"), InSales: true, Available: true},
+		},
+		sets: map[contract.CandidateKey][]domain.Candidate{},
+	}
+	for _, signal := range []string{"catalog", "sales"} {
+		reader.add(contract.CandidateKey{Signal: signal}, "alias")
+		reader.add(contract.CandidateKey{Signal: signal}, "other")
+	}
+	engine := New(reader)
+	online, err := engine.Recommend(context.Background(), contract.RecommendationQuery{ClientID: "u", Mode: contract.Online})
+	if err != nil || !reflect.DeepEqual(itemIDs(online), []domain.ItemID{"other"}) {
+		t.Fatalf("online cards: %v, %v", itemIDs(online), err)
+	}
+	historical, err := engine.Recommend(context.Background(), contract.RecommendationQuery{ClientID: "u", Mode: contract.Backtest, SnapshotID: "s"})
+	if err != nil || !reflect.DeepEqual(itemIDs(historical), []domain.ItemID{"alias", "other"}) {
+		t.Fatalf("historical cards: %v, %v", itemIDs(historical), err)
+	}
+}
+
 func TestOnlineHidesRenewalAndKeepsUpgrade(t *testing.T) {
 	base := domain.ItemID("base")
 	renew, upgrade := domain.ItemID("renew"), domain.ItemID("upgrade")

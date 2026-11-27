@@ -208,6 +208,9 @@ func evaluateDatabase(ctx context.Context, logger *slog.Logger, label, snapshot,
 		if meta.DatasetVersion != release.Version || meta.WorkbookSHA256 != release.SHA || meta.TrainThrough.Format(time.DateOnly) != eval.TrainThrough {
 			return backtestData{}, fmt.Errorf("snapshot does not match %s release and train cutoff", release.Version)
 		}
+		if meta.FeedGeneratedAt != nil && meta.FeedGeneratedAt.Format(time.DateOnly) > eval.TrainThrough {
+			return backtestData{}, fmt.Errorf("snapshot uses a catalog feed generated after the historical cutoff")
+		}
 		batch, err := store.OfflineDataset(ctx)
 		if err != nil {
 			return backtestData{}, err

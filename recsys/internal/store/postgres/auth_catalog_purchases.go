@@ -20,6 +20,9 @@ import (
 
 // CreateAccountWithProfile atomically creates a new isolated stand client_id, account_profile, and stand_account.
 func (s *Store) CreateAccountWithProfile(ctx context.Context, p auth.CreateAccountParams) (auth.AccountRecord, error) {
+	if s.closedPreview {
+		return auth.AccountRecord{}, fmt.Errorf("%w: use a configured preview account", auth.ErrInvalidInput)
+	}
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return auth.AccountRecord{}, err
@@ -93,8 +96,8 @@ func (s *Store) AccountByLogin(ctx context.Context, login string) (auth.AccountR
 		       COALESCE(c.client_group, 'B2B'), c.industry, a.created_at, a.role
 		FROM recommendations.stand_accounts a
 		JOIN recommendations.clients c ON c.client_id = a.client_id
-		WHERE a.login = $1
-	`, strings.ToLower(strings.TrimSpace(login))).Scan(
+		WHERE a.login = $1 AND (NOT $2 OR (a.login,a.client_id) IN (('notver','DEMO-NOTVER'),('verb2b','DEMO-VERB2B'),('verb2c','DEMO-VERB2C'),('admin','DEMO-ADMIN')))
+	`, strings.ToLower(strings.TrimSpace(login)), s.closedPreview).Scan(
 		&rec.AccountID, &rec.Login, &rec.PasswordHash,
 		&rec.Profile.ID, &clientID, &group, &rec.Profile.Industry, &rec.CreatedAt, &rec.Profile.Role,
 	)
@@ -128,15 +131,25 @@ func (s *Store) CreateSession(ctx context.Context, tokenHash []byte, accountID i
 		JOIN recommendations.clients c ON c.client_id = a.client_id
 		WHERE a.account_id = $1
 		  AND a.client_id IN ('DEMO-NOTVER', 'DEMO-VERB2B', 'DEMO-VERB2C')
-		  AND EXISTS (SELECT 1 FROM recommendations.model_snapshots WHERE snapshot_id = 'demo-v1')
-		  AND NOT EXISTS (SELECT 1 FROM recommendations.model_snapshots WHERE snapshot_id <> 'demo-v1')
-		  AND NOT EXISTS (SELECT 1 FROM recommendations.sales)
+		  AND (
+		    $3 OR (
+		      EXISTS (SELECT 1 FROM recommendations.model_snapshots WHERE snapshot_id = 'demo-v1')
+		      AND NOT EXISTS (SELECT 1 FROM recommendations.model_snapshots WHERE snapshot_id <> 'demo-v1')
+		      AND NOT EXISTS (SELECT 1 FROM recommendations.sales)
+		    )
+		  )
 		RETURNING client_id, split_part(client_id, '-SESSION-', 1)
-	`, accountID, tokenHash).Scan(&isolatedClient, &template)
+	`, accountID, tokenHash, s.closedPreview).Scan(&isolatedClient, &template)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return err
 	}
 	_, seedItem, _ := previewScenario(domain.ClientID(contract.PreviewScenarioPrefix + template))
+	if s.closedPreview && template != "" {
+		seedItem, err = closedPreviewSeed(ctx, tx, domain.ClientID(template))
+		if err != nil {
+			return err
+		}
+	}
 	if seedItem != "" {
 		if _, err := createPurchase(ctx, tx, domain.ClientID(isolatedClient), string(seedItem), createdAt); err != nil {
 			return fmt.Errorf("seed preview history: %w", err)
@@ -162,8 +175,8 @@ func (s *Store) SessionByTokenHash(ctx context.Context, tokenHash []byte) (auth.
 		FROM recommendations.stand_sessions s
 		JOIN recommendations.stand_accounts a ON a.account_id = s.account_id
 		JOIN recommendations.clients c ON c.client_id = COALESCE(s.client_id, a.client_id)
-		WHERE s.token_hash = $1
-	`, tokenHash).Scan(
+		WHERE s.token_hash = $1 AND (NOT $2 OR (a.login,a.client_id) IN (('notver','DEMO-NOTVER'),('verb2b','DEMO-VERB2B'),('verb2c','DEMO-VERB2C'),('admin','DEMO-ADMIN')))
+	`, tokenHash, s.closedPreview).Scan(
 		&rec.AccountID, &rec.CreatedAt, &rec.ExpiresAt,
 		&rec.Profile.ID, &clientID, &rec.Profile.Login,
 		&group, &rec.Profile.Industry, &rec.Profile.Role,
@@ -332,6 +345,28 @@ func (s *Store) CreatePurchase(ctx context.Context, clientID domain.ClientID, ra
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
+	if s.closedPreview {
+		var selected string
+		err := tx.QueryRow(ctx, `
+			SELECT f.item_id
+			FROM recommendations.model_snapshots m
+			JOIN recommendations.item_feature_versions f USING(feature_version)
+			JOIN recommendations.clients c ON c.client_id=$2
+			WHERE m.snapshot_id=$1 AND f.available AND (f.item_id=$3 OR f.offer_id=$3)
+			  AND (f.audience='' OR f.audience=c.client_group)
+			  AND (f.organization_type IN ('','не определено') OR
+			       (c.client_group='B2C' AND f.organization_type='для дома') OR
+			       (c.client_group='B2B' AND lower(c.client_type)=f.organization_type))
+			LIMIT 1
+		`, s.onlineSnapshot, clientID, strings.TrimSpace(rawItemID)).Scan(&selected)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return PurchaseRecord{}, ErrItemNotFound
+		}
+		if err != nil {
+			return PurchaseRecord{}, err
+		}
+		rawItemID = selected
+	}
 	record, err := createPurchase(ctx, tx, clientID, rawItemID, now)
 	if err != nil {
 		return PurchaseRecord{}, err
