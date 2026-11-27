@@ -1,7 +1,7 @@
-// Команда импорта и проверки наборов данных (clients.csv + sales.csv v4/v5) и закрытого релиза v4.
+// Команда импорта и проверки наборов данных (clients.csv + sales.csv v4/v5) и закрытых релизов v5/v4.
 //
 //	go run ./cmd/import -clients testdata/smoke/clients.csv -sales testdata/smoke/sales.csv -version demo -dry-run
-//	go run ./cmd/import -verify-v4
+//	go run ./cmd/import -verify-v5
 package main
 
 import (

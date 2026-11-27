@@ -1,0 +1,257 @@
+{
+  "dataset": "demo",
+  "demo": true,
+  "snapshot_id": "demo-snap-v1",
+  "has_product_group_column": true,
+  "train_through": "2026-08-31",
+  "test_from": ">2026-08-31",
+  "feed_generated_at": "unavailable (csv mode)",
+  "protocol": {
+    "cutoff_rule": "train order_week <= 2026-08-31; test order_week > 2026-08-31",
+    "basket_key": "(order_id, order_week)",
+    "denominator_scope": "all clients in cohorts A and B (no sampling; B is a subset of A)",
+    "metric_top_k": 3,
+    "top_k_scope": "only the first 3 top-level recommendations count toward Precision@3 (denominator always 3 per client)",
+    "sales_universe_only": true,
+    "family_basis": "product_group"
+  },
+  "summary": {
+    "rows": 17,
+    "unique_clients": 7,
+    "baskets": 12,
+    "total_items": 6,
+    "product_groups": 5,
+    "train_items": 5,
+    "cold_items_count": 1,
+    "cohort_a_clients": 3,
+    "cohort_a_b2b_clients": 2,
+    "cohort_a_b2c_clients": 1,
+    "cohort_b_clients": 2,
+    "cohort_b_b2b_clients": 1,
+    "cohort_b_b2c_clients": 1
+  },
+  "cells": [
+    {
+      "demo": true,
+      "cohort": "A",
+      "group": "all",
+      "clients": 3,
+      "popularity": {
+        "precision_at_3": 33.33,
+        "fill_rate": 100,
+        "full3_rate": 100,
+        "hits": 3,
+        "variant_hits": 1,
+        "new_product_hits": 2,
+        "unknown_family_hits": 0,
+        "variant_share": 33.33
+      },
+      "copurchase": {
+        "precision_at_3": 44.44,
+        "fill_rate": 100,
+        "full3_rate": 0,
+        "hits": 4,
+        "variant_hits": 2,
+        "new_product_hits": 2,
+        "unknown_family_hits": 0,
+        "variant_share": 50
+      },
+      "hybrid": {
+        "precision_at_3": 44.44,
+        "fill_rate": 100,
+        "full3_rate": 33.33,
+        "hits": 4,
+        "variant_hits": 2,
+        "new_product_hits": 2,
+        "unknown_family_hits": 0,
+        "variant_share": 50
+      }
+    },
+    {
+      "demo": true,
+      "cohort": "A",
+      "group": "B2B",
+      "clients": 2,
+      "popularity": {
+        "precision_at_3": 33.33,
+        "fill_rate": 100,
+        "full3_rate": 100,
+        "hits": 2,
+        "variant_hits": 1,
+        "new_product_hits": 1,
+        "unknown_family_hits": 0,
+        "variant_share": 50
+      },
+      "copurchase": {
+        "precision_at_3": 50,
+        "fill_rate": 100,
+        "full3_rate": 0,
+        "hits": 3,
+        "variant_hits": 2,
+        "new_product_hits": 1,
+        "unknown_family_hits": 0,
+        "variant_share": 66.67
+      },
+      "hybrid": {
+        "precision_at_3": 50,
+        "fill_rate": 100,
+        "full3_rate": 50,
+        "hits": 3,
+        "variant_hits": 2,
+        "new_product_hits": 1,
+        "unknown_family_hits": 0,
+        "variant_share": 66.67
+      }
+    },
+    {
+      "demo": true,
+      "cohort": "A",
+      "group": "B2C",
+      "clients": 1,
+      "popularity": {
+        "precision_at_3": 33.33,
+        "fill_rate": 100,
+        "full3_rate": 100,
+        "hits": 1,
+        "variant_hits": 0,
+        "new_product_hits": 1,
+        "unknown_family_hits": 0,
+        "variant_share": 0
+      },
+      "copurchase": {
+        "precision_at_3": 33.33,
+        "fill_rate": 100,
+        "full3_rate": 0,
+        "hits": 1,
+        "variant_hits": 0,
+        "new_product_hits": 1,
+        "unknown_family_hits": 0,
+        "variant_share": 0
+      },
+      "hybrid": {
+        "precision_at_3": 33.33,
+        "fill_rate": 100,
+        "full3_rate": 0,
+        "hits": 1,
+        "variant_hits": 0,
+        "new_product_hits": 1,
+        "unknown_family_hits": 0,
+        "variant_share": 0
+      }
+    },
+    {
+      "demo": true,
+      "cohort": "B",
+      "group": "all",
+      "clients": 2,
+      "popularity": {
+        "precision_at_3": 16.67,
+        "fill_rate": 100,
+        "full3_rate": 100,
+        "hits": 1,
+        "variant_hits": 0,
+        "new_product_hits": 1,
+        "unknown_family_hits": 0,
+        "variant_share": 0
+      },
+      "copurchase": {
+        "precision_at_3": 33.33,
+        "fill_rate": 100,
+        "full3_rate": 0,
+        "hits": 2,
+        "variant_hits": 1,
+        "new_product_hits": 1,
+        "unknown_family_hits": 0,
+        "variant_share": 50
+      },
+      "hybrid": {
+        "precision_at_3": 33.33,
+        "fill_rate": 100,
+        "full3_rate": 0,
+        "hits": 2,
+        "variant_hits": 1,
+        "new_product_hits": 1,
+        "unknown_family_hits": 0,
+        "variant_share": 50
+      }
+    },
+    {
+      "demo": true,
+      "cohort": "B",
+      "group": "B2B",
+      "clients": 1,
+      "popularity": {
+        "precision_at_3": 0,
+        "fill_rate": 100,
+        "full3_rate": 100,
+        "hits": 0,
+        "variant_hits": 0,
+        "new_product_hits": 0,
+        "unknown_family_hits": 0,
+        "variant_share": 0
+      },
+      "copurchase": {
+        "precision_at_3": 33.33,
+        "fill_rate": 100,
+        "full3_rate": 0,
+        "hits": 1,
+        "variant_hits": 1,
+        "new_product_hits": 0,
+        "unknown_family_hits": 0,
+        "variant_share": 100
+      },
+      "hybrid": {
+        "precision_at_3": 33.33,
+        "fill_rate": 100,
+        "full3_rate": 0,
+        "hits": 1,
+        "variant_hits": 1,
+        "new_product_hits": 0,
+        "unknown_family_hits": 0,
+        "variant_share": 100
+      }
+    },
+    {
+      "demo": true,
+      "cohort": "B",
+      "group": "B2C",
+      "clients": 1,
+      "popularity": {
+        "precision_at_3": 33.33,
+        "fill_rate": 100,
+        "full3_rate": 100,
+        "hits": 1,
+        "variant_hits": 0,
+        "new_product_hits": 1,
+        "unknown_family_hits": 0,
+        "variant_share": 0
+      },
+      "copurchase": {
+        "precision_at_3": 33.33,
+        "fill_rate": 100,
+        "full3_rate": 0,
+        "hits": 1,
+        "variant_hits": 0,
+        "new_product_hits": 1,
+        "unknown_family_hits": 0,
+        "variant_share": 0
+      },
+      "hybrid": {
+        "precision_at_3": 33.33,
+        "fill_rate": 100,
+        "full3_rate": 0,
+        "hits": 1,
+        "variant_hits": 0,
+        "new_product_hits": 1,
+        "unknown_family_hits": 0,
+        "variant_share": 0
+      }
+    }
+  ],
+  "hybrid_status": "completed",
+  "leakage_warnings": [
+    "Исторические снимки каталога, наличия (available) и профилей клиентов на дату отсечения 2026-08-31 отсутствуют.",
+    "Атрибуты catalog_offers, available и сопоставления historical_item_offers отражают дату выгрузки фида и могут содержать сведения после окончания train.",
+    "Поля профиля clients (industry, segment, lk_access) отражают состояние на момент выгрузки датасета, а не исторический срез."
+  ]
+}

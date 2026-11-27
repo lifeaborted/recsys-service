@@ -1,0 +1,8 @@
+client_id,client_group,client_type,industry,segment,lk_access
+SYN-A1,B2B,ЮЛ,IT,mid,да
+SYN-B1,B2B,ЮЛ,IT,small,нет
+SYN-B2,B2C,ФЛ,,,да
+SYN-P1,B2B,ЮЛ,IT,mid,да
+SYN-P2,B2B,ЮЛ,IT,small,да
+SYN-P3,B2C,ФЛ,,,да
+SYN-P4,B2C,ФЛ,,,нет
