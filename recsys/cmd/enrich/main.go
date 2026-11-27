@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"recsys/internal/domain"
@@ -20,7 +21,7 @@ import (
 )
 
 func main() {
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	if err := run(ctx, os.Args[1:], os.Stdout, os.Stderr); err != nil && !errors.Is(err, flag.ErrHelp) {
 		fmt.Fprintln(os.Stderr, "enrich:", err)
@@ -45,8 +46,31 @@ func run(ctx context.Context, args []string, output, diagnostics io.Writer) erro
 	vectorIndex := flags.Bool("vector-index", false, "read catalog vectors already stored in DATABASE_URL")
 	proposalPath := flags.String("propose-relation", "", "extract a relation proposal from one approved source JSON")
 	requestsPath := flags.String("relation-requests", "", "path to relation requests approving local source excerpts for extraction")
+	discover := flags.Bool("discover-online", false, "discover relation drafts from a pinned v5-online snapshot")
+	statePath := flags.String("relation-state", "", "local JSON file storing completed online discoveries")
+	maxPairs := flags.Int("max-pairs", 20, "maximum new relation requests per background run")
+	neighbors := flags.Int("neighbors", 8, "number of existing vector neighbors used to prioritize discovery")
+
 	if err := flags.Parse(args); err != nil {
 		return err
+	}
+	if *discover {
+		var invalid string
+		flags.Visit(func(f *flag.Flag) {
+			switch f.Name {
+			case "discover-online", "snapshot", "sources", "relation-state", "max-pairs", "neighbors":
+			default:
+				invalid = f.Name
+			}
+		})
+		if flags.NArg() != 0 || invalid != "" || *snapshot == "" || *reviewPath == "" || *statePath == "" ||
+			*maxPairs < 1 || *maxPairs > 200 || *neighbors < 1 || *neighbors > 50 {
+			return fmt.Errorf("discover-online requires -snapshot, -sources and -relation-state (max-pairs 1–200, neighbors 1–50)")
+		}
+		return discoverOnline(ctx, *snapshot, *reviewPath, *statePath, *maxPairs, *neighbors, output)
+	}
+	if *statePath != "" || *maxPairs != 20 || *neighbors != 8 {
+		return fmt.Errorf("relation-state, max-pairs and neighbors require discover-online")
 	}
 	if *proposalPath != "" {
 		onlyProposal := flags.NFlag() == 1 && flags.NArg() == 0

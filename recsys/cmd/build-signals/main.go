@@ -38,7 +38,14 @@ func run() error {
 	in := flag.String("input", "", "input JSON containing Snapshot metadata and Data (DatasetBatch)")
 	out := flag.String("output", "", "destination snapshot JSON")
 	database, snapshot, dataset, cutoff, evidence := registerDatabaseFlags()
+	onlineBase := flag.String("online-base", "", "copy an online snapshot and publish reviewed relations into -snapshot")
 	flag.Parse()
+	if *onlineBase != "" {
+		if !*database || *snapshot == "" || *evidence == "" || *in != "" || *out != "" || *dataset != "" || flag.NArg() != 0 {
+			return fmt.Errorf("online publication requires -database -online-base -snapshot -evidence")
+		}
+		return publishReviewedOnline(context.Background(), *onlineBase, *snapshot, *evidence)
+	}
 	if *database {
 		if *in != "" || *out != "" {
 			return fmt.Errorf("database mode does not take -input or -output")

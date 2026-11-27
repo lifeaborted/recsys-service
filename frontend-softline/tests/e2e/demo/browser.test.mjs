@@ -126,12 +126,26 @@ test("главная для гостя, три статуса и закрыта�
 
   const guest = page.waitForResponse((r) => r.url().includes("/recommendations/guest") && r.ok());
   await page.goto(SCREEN);
-  await guest;
+  assert.equal(new URL((await guest).url()).searchParams.get("limit"), "3");
   await page.getByRole("heading", { name: "Популярные товары" }).waitFor();
   await page.locator(".store-front .portal-suggestion").first().waitFor();
   assert.equal(await page.getByRole("link", { name: "Отладка рекомендаций" }).count(), 0);
   assert.equal(await page.getByRole("button", { name: "Купить товар" }).count(), 0);
   await page.waitForFunction(() => [...document.images].filter((image) => image.closest(".store-promos")).every((image) => image.complete && image.naturalWidth > 0));
+
+  const search = page.getByRole("search");
+  const term = search.getByRole("textbox");
+  const runsWithLimit = (limit) => page.waitForResponse((response) =>
+    response.url().includes("/recommendations/guest") &&
+    new URL(response.url()).searchParams.get("limit") === limit && response.ok());
+  await term.fill("модуль");
+  const expanded = runsWithLimit("36");
+  await search.getByRole("button", { name: "Поиск" }).click();
+  await expanded;
+  await term.fill("");
+  const compact = runsWithLimit("3");
+  await search.getByRole("button", { name: "Поиск" }).click();
+  await compact;
 
   async function enter(name) {
     await page.locator(".store-actions").getByRole("button", { name: "Войти", exact: true }).click();
@@ -142,7 +156,7 @@ test("главная для гостя, три статуса и закрыта�
       : "fixture");
     const signedIn = page.waitForResponse((r) => r.url().includes("/recommendations/me") && r.ok());
     await modal.getByRole("button", { name: "Войти", exact: true }).click();
-    await signedIn;
+    assert.equal(new URL((await signedIn).url()).searchParams.get("limit"), "3");
     await page.locator(".sidebar__username").getByText(name, { exact: true }).waitFor();
     await page.locator(".sidebar__email").getByText(profiles[name].label, { exact: true }).waitFor();
     await page.getByRole("heading", { name: "Вам может подойти" }).waitFor();

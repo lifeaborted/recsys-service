@@ -87,12 +87,12 @@ function LoginDialog({ close }: { close: () => void }) {
 }
 
 export function StorefrontPage({ openLogin, restricted }: { openLogin: boolean; restricted: boolean }) {
-  const result = useDemoRecommendations();
   const [showLogin, setShowLogin] = useState(false);
   const [showCatalog, setShowCatalog] = useState(false);
   const [banner, setBanner] = useState(0);
   const [search, setSearch] = useState("");
   const [query, setQuery] = useState("");
+  const result = useDemoRecommendations(query ? 36 : 3);
   const shelf = useRef<HTMLElement>(null);
 
   function closeLogin() {

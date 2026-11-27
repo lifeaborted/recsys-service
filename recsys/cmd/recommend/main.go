@@ -13,7 +13,7 @@ import (
 
 	recommendationv1 "recsys/api/recommendation/v1"
 	"recsys/internal/config"
-	"recsys/internal/explain"
+	"recsys/internal/contract"
 	"recsys/internal/logger"
 	"recsys/internal/recommend"
 	"recsys/internal/store/postgres"
@@ -52,8 +52,17 @@ func run(ctx context.Context, cfg config.Config, log *slog.Logger) error {
 	}
 
 	engine := recommend.New(store)
-	if os.Getenv("LLM_BASE_URL") != "" && os.Getenv("LLM_MODEL") != "" {
-		engine.UseReranker(explain.ChatFromEnv())
+	warmupCtx, cancelWarmup := context.WithCancel(ctx)
+	defer cancelWarmup()
+	if os.Getenv("RECSYS_ONLINE_SNAPSHOT") != "" {
+		go func() {
+			warmupCtx, cancel := context.WithTimeout(warmupCtx, cfg.RequestTimeout)
+			defer cancel()
+			_, err := engine.Recommend(warmupCtx, contract.RecommendationQuery{ClientID: "DEMO-GUEST", Mode: contract.Online, Limit: 3})
+			if err != nil {
+				log.Debug("guest recommendations warmup skipped", "error", err)
+			}
+		}()
 	}
 
 	listener, err := net.Listen("tcp", cfg.GRPC.ListenAddr)

@@ -222,3 +222,25 @@ func registerDatabaseFlags() (*bool, *string, *string, *string, *string) {
 		flag.String("train-through", "2026-08-31", "inclusive train cutoff"),
 		flag.String("evidence", "", "verified output of cmd/enrich (database mode)")
 }
+
+func publishReviewedOnline(ctx context.Context, base, target, path string) error {
+	file, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	var reviewed enrichment.Result
+	if err := json.NewDecoder(file).Decode(&reviewed); err != nil {
+		return err
+	}
+	store, err := postgres.OpenContext(ctx, config.Load().DatabaseURL)
+	if err != nil {
+		return err
+	}
+	defer store.Close()
+	if err := store.PublishOnlineRelations(ctx, base, target, reviewed); err != nil {
+		return err
+	}
+	fmt.Printf("published snapshot_id=%s base=%s reviewed_relations=%d\n", target, base, len(reviewed.Relations))
+	return nil
+}

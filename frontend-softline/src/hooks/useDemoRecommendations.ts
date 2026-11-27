@@ -3,7 +3,7 @@ import { ApiError, getRecommendations } from "../api/recsysClient";
 import type { Recommendations } from "../api/recsysTypes";
 import { RECSYS_API, useSession } from "../state/session";
 
-export function useDemoRecommendations(enabled = true) {
+export function useDemoRecommendations(limit = 3) {
   const { profile, loading, logout } = useSession();
   const token = profile?.token ?? "";
   const [data, setData] = useState<Recommendations | null>(null);
@@ -15,11 +15,11 @@ export function useDemoRecommendations(enabled = true) {
   useEffect(() => {
     setData(null);
     setError(null);
-    if (loading || !enabled) return;
+    if (loading) return;
     const controller = new AbortController();
     setPending(true);
     void getRecommendations({ baseUrl: RECSYS_API, transport: "http", token },
-      { scenario: "auto", profileId: profile?.profile_id ?? "guest", signal: controller.signal })
+      { scenario: "auto", profileId: profile?.profile_id ?? "guest", limit, signal: controller.signal })
       .then((result) => { if (!controller.signal.aborted) setData(result); })
       .catch((cause: unknown) => {
         if (controller.signal.aborted) return;
@@ -30,7 +30,7 @@ export function useDemoRecommendations(enabled = true) {
       })
       .finally(() => { if (!controller.signal.aborted) setPending(false); });
     return () => controller.abort();
-  }, [enabled, loading, logout, nonce, profile?.profile_id, token]);
+  }, [limit, loading, logout, nonce, profile?.profile_id, token]);
 
   return { data, error, loading: loading || pending, refresh };
 }

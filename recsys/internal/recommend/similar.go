@@ -15,14 +15,14 @@ type SimilarItems interface {
 	SimilarItems(ctx context.Context, snapshotID string, owned []domain.ItemID, limit int) ([]domain.Candidate, error)
 }
 
-func collectSimilar(ctx context.Context, reader Reader, snapshot string, owned []domain.ItemID, bought map[domain.ItemID]bool, best map[domain.ItemID]ranked, pending map[domain.ItemID]bool) {
+func collectSimilar(ctx context.Context, reader Reader, snapshot string, owned []domain.ItemID, bought map[domain.ItemID]bool, best map[domain.ItemID]ranked, pending map[domain.ItemID]bool) bool {
 	source, ok := reader.(SimilarItems)
-	if !ok {
-		return
+	if !ok || len(owned) == 0 {
+		return true
 	}
 	rows, err := source.SimilarItems(ctx, snapshot, owned, cardLimit(contract.Online))
 	if err != nil {
-		return
+		return false
 	}
 	for _, candidate := range rows {
 		if candidate.ItemID == "" || bought[candidate.ItemID] {
@@ -39,6 +39,7 @@ func collectSimilar(ctx context.Context, reader Reader, snapshot string, owned [
 		best[candidate.ItemID] = row
 		pending[candidate.ItemID] = true
 	}
+	return true
 }
 
 func similarProof(candidate domain.Candidate, snapshot string) []domain.Evidence {

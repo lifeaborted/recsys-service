@@ -91,9 +91,10 @@ async function request<T>(cfg: RecsysClientConfig, path: string, init: RequestIn
 
 export async function getRecommendations(
   cfg: RecsysClientConfig,
-  options: { scenario: DemoScenario; profileId: string; signal?: AbortSignal },
+  options: { scenario: DemoScenario; profileId: string; limit?: number; signal?: AbortSignal },
 ): Promise<Recommendations> {
   const scenario = scenarioFor(options.scenario, options.profileId);
+  const limit = options.limit ?? 3;
 
   if (cfg.transport === "mock") {
     if (scenario === "slow") await delay(1500, options.signal);
@@ -105,12 +106,14 @@ export async function getRecommendations(
       throw new ApiError(example.error.message, example.request_id, example.error.code, 500);
     }
     const example = examples[scenario] ?? examples.full;
-    return structuredClone(example);
+    const result = structuredClone(example);
+    result.items = result.items.slice(0, limit);
+    return result;
   }
 
   return request<Recommendations>(
     cfg,
-    `/recommendations/${cfg.token ? "me" : "guest"}?scenario=${encodeURIComponent(scenario)}&limit=36`,
+    `/recommendations/${cfg.token ? "me" : "guest"}?scenario=${encodeURIComponent(scenario)}&limit=${limit}`,
     { signal: options.signal },
   );
 }

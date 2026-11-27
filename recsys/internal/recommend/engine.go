@@ -23,14 +23,11 @@ type Reader interface {
 }
 
 type Engine struct {
-	reader   Reader
-	reranker Reranker
+	reader Reader
+	cache  onlineCache
 }
 
 func New(r Reader) *Engine { return &Engine{reader: r} }
-
-// UseReranker reorders the online shortlist. Backtest order stays on the cascade.
-func (e *Engine) UseReranker(r Reranker) { e.reranker = r }
 
 var _ contract.Recommender = (*Engine)(nil)
 
@@ -106,6 +103,13 @@ func (e *Engine) Recommend(ctx context.Context, q contract.RecommendationQuery) 
 		}
 	}
 	slices.Sort(ids)
+	var key onlineKey
+	if q.Mode == contract.Online {
+		key = recommendationKey(s.ID, client, ids, want)
+		if result, found := e.cache.load(key); found {
+			return result, nil
+		}
+	}
 	products, err := e.reader.Products(ctx, s.ID, ids)
 	if err != nil {
 		return zero, fmt.Errorf("history products: %w", err)
@@ -125,11 +129,13 @@ func (e *Engine) Recommend(ctx context.Context, q contract.RecommendationQuery) 
 	best := map[domain.ItemID]ranked{}
 	cards := map[domain.ItemID]Product{}
 	owned := slices.Clone(ids)
+	cacheable := q.Mode == contract.Online
 	finish := func(ordered []ranked) contract.RecommendationResult {
-		if q.Mode == contract.Online {
-			ordered = rerankOnline(ctx, e.reranker, ordered, cards, products)
+		result := render(s.ID, q.Mode, ordered, cards, products, want)
+		if cacheable {
+			e.cache.save(key, result)
 		}
-		return render(s.ID, q.Mode, ordered, cards, products, want)
+		return result
 	}
 	similarSeen := false
 	for poolLimit := 64; ; poolLimit *= 2 {
@@ -140,7 +146,7 @@ func (e *Engine) Recommend(ctx context.Context, q contract.RecommendationQuery) 
 		pending := map[domain.ItemID]bool{}
 		if q.Mode == contract.Online && !similarSeen {
 			similarSeen = true
-			collectSimilar(ctx, e.reader, s.ID, owned, bought, best, pending)
+			cacheable = collectSimilar(ctx, e.reader, s.ID, owned, bought, best, pending)
 		}
 		for _, p := range active {
 			rows, err := e.reader.Candidates(ctx, s.ID, p.key, poolLimit)

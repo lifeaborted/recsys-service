@@ -6,10 +6,9 @@ import (
 	"fmt"
 	"reflect"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
-
-	"strings"
 
 	"recsys/internal/contract"
 	"recsys/internal/domain"
@@ -129,8 +128,41 @@ func TestRecommendModule(t *testing.T) {
 		t.Fatal(r)
 	}
 	m.err = errors.New("read failed")
+	query.Limit = 1 // A different limit misses the cache and reads candidates.
 	if _, err := engine.Recommend(context.Background(), query); !errors.Is(err, m.err) {
 		t.Fatalf("reader error: %v", err)
+	}
+}
+
+func TestOnlineCacheReusesStableResultsUntilHistoryChanges(t *testing.T) {
+	reader := &memory{
+		client: domain.Client{ID: "u", Group: domain.B2C},
+		products: map[domain.ItemID]Product{
+			"a": {Available: true, OfferID: offerID("offer-a")},
+			"b": {Available: true, OfferID: offerID("offer-b")},
+		},
+		sets: map[contract.CandidateKey][]domain.Candidate{},
+	}
+	reader.add(contract.CandidateKey{Signal: "catalog"}, "a")
+	reader.add(contract.CandidateKey{Signal: "catalog"}, "b")
+	engine := New(reader)
+	query := contract.RecommendationQuery{ClientID: "u", Mode: contract.Online, Limit: 1}
+	first, err := engine.Recommend(t.Context(), query)
+	if err != nil || !reflect.DeepEqual(itemIDs(first), []domain.ItemID{"a"}) {
+		t.Fatalf("first result: %v, %v", itemIDs(first), err)
+	}
+	first.Items[0].ItemID = "mutated"
+	reader.err = errors.New("candidate reader is down")
+	cached, err := engine.Recommend(t.Context(), query)
+	if err != nil || !reflect.DeepEqual(itemIDs(cached), []domain.ItemID{"a"}) {
+		t.Fatalf("cached result: %v, %v", itemIDs(cached), err)
+	}
+
+	reader.err = nil
+	reader.history = []domain.Sale{{ItemID: "a"}}
+	afterPurchase, err := engine.Recommend(t.Context(), query)
+	if err != nil || !reflect.DeepEqual(itemIDs(afterPurchase), []domain.ItemID{"b"}) {
+		t.Fatalf("result after purchase: %v, %v", itemIDs(afterPurchase), err)
 	}
 }
 
@@ -269,60 +301,7 @@ func TestOnlineDropsSameCategoryRival(t *testing.T) {
 	}
 }
 
-type orderFunc func(context.Context, []string, []RerankItem) ([]domain.ItemID, error)
-
-func (fn orderFunc) Order(ctx context.Context, owned []string, items []RerankItem) ([]domain.ItemID, error) {
-	return fn(ctx, owned, items)
-}
-
-func TestOnlineRerankReordersOnlyTheShortlist(t *testing.T) {
-	left, right := domain.ItemID("a"), domain.ItemID("b")
-	m := &memory{
-		client:  domain.Client{ID: "u", Group: domain.B2B},
-		cutoff:  time.Date(2026, 8, 31, 0, 0, 0, 0, time.UTC),
-		history: []domain.Sale{{ItemID: "base"}},
-		sets:    map[contract.CandidateKey][]domain.Candidate{},
-		products: map[domain.ItemID]Product{
-			"base": {Title: "Base"},
-			left:   {Title: "A", Available: true, InSales: true, OfferID: offerID("a")},
-			right:  {Title: "B", Available: true, InSales: true, OfferID: offerID("b")},
-		},
-	}
-	m.add(contract.CandidateKey{Signal: "catalog"}, left)
-	m.add(contract.CandidateKey{Signal: "catalog"}, right)
-	m.add(contract.CandidateKey{Signal: "sales"}, left)
-	m.add(contract.CandidateKey{Signal: "sales"}, right)
-	engine := New(m)
-	engine.UseReranker(orderFunc(func(_ context.Context, _ []string, items []RerankItem) ([]domain.ItemID, error) {
-		return []domain.ItemID{items[1].ID, items[0].ID}, nil
-	}))
-	online, err := engine.Recommend(context.Background(), contract.RecommendationQuery{ClientID: "u", Mode: contract.Online})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := itemIDs(online); !reflect.DeepEqual(got, []domain.ItemID{right, left}) {
-		t.Fatalf("reranked cards: %v", got)
-	}
-	back, err := engine.Recommend(context.Background(), contract.RecommendationQuery{ClientID: "u", Mode: contract.Backtest, SnapshotID: "s"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := itemIDs(back); !reflect.DeepEqual(got, []domain.ItemID{left, right}) {
-		t.Fatalf("backtest cards: %v", got)
-	}
-	engine.UseReranker(orderFunc(func(context.Context, []string, []RerankItem) ([]domain.ItemID, error) {
-		return nil, errors.New("model down")
-	}))
-	online, err = engine.Recommend(context.Background(), contract.RecommendationQuery{ClientID: "u", Mode: contract.Online})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := itemIDs(online); !reflect.DeepEqual(got, []domain.ItemID{left, right}) {
-		t.Fatalf("fallback cards: %v", got)
-	}
-}
-
-func TestOnlineRerankRunsOnceAfterPoolExpansion(t *testing.T) {
+func TestOnlineFillsRequestedLimitAfterPoolExpansion(t *testing.T) {
 	m := &memory{
 		client:   domain.Client{ID: "u", Group: domain.B2B},
 		cutoff:   time.Date(2026, 8, 31, 0, 0, 0, 0, time.UTC),
@@ -334,19 +313,9 @@ func TestOnlineRerankRunsOnceAfterPoolExpansion(t *testing.T) {
 		m.products[id] = Product{Title: string(id), Available: i < 2 || i == 64, OfferID: offerID(string(id))}
 		m.add(contract.CandidateKey{Signal: "catalog"}, id)
 	}
-	calls := 0
-	engine := New(m)
-	engine.UseReranker(orderFunc(func(_ context.Context, _ []string, items []RerankItem) ([]domain.ItemID, error) {
-		calls++
-		got := make([]domain.ItemID, len(items))
-		for i, item := range items {
-			got[i] = item.ID
-		}
-		return got, nil
-	}))
-	result, err := engine.Recommend(context.Background(), contract.RecommendationQuery{ClientID: "u", Mode: contract.Online, Limit: 3})
-	if err != nil || len(result.Items) != 3 || calls != 1 {
-		t.Fatalf("result has %d items, %d reranks: %v", len(result.Items), calls, err)
+	result, err := New(m).Recommend(context.Background(), contract.RecommendationQuery{ClientID: "u", Mode: contract.Online, Limit: 3})
+	if err != nil || len(result.Items) != 3 {
+		t.Fatalf("result has %d items: %v", len(result.Items), err)
 	}
 }
 

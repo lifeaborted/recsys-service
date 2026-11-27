@@ -1,0 +1,16 @@
+[Unit]
+Description=Discover catalog relationships for Recsys
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+DynamicUser=yes
+StateDirectory=recsys-relations
+UMask=0077
+EnvironmentFile=/etc/recsys-relations/worker.env
+ExecStart=/usr/local/libexec/recsys-enrich -discover-online -snapshot ${RECSYS_ONLINE_SNAPSHOT} -sources /etc/recsys-relations/sources.json -relation-state /var/lib/recsys-relations/discoveries.json
+TimeoutStartSec=35min
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
