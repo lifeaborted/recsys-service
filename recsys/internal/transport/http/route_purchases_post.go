@@ -1,12 +1,15 @@
 package transporthttp
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strings"
 	"time"
 
 	"recsys/internal/auth"
+	"recsys/internal/contract"
+	"recsys/internal/domain"
 	"recsys/internal/transport/http/respond"
 )
 
@@ -47,4 +50,21 @@ func (s *Server) handlePostPurchases(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respond.JSON(w, r, http.StatusCreated, recorded)
+}
+
+func (s *Server) handleGetPurchases(w http.ResponseWriter, r *http.Request) {
+	profile, _ := auth.Current(r.Context())
+	store, ok := s.purchases.(interface {
+		ListPurchases(context.Context, domain.ClientID) ([]contract.PurchaseHistoryItem, error)
+	})
+	if !ok {
+		respond.Error(w, r, http.StatusServiceUnavailable, "purchases_unavailable", "Purchases store unavailable")
+		return
+	}
+	items, err := store.ListPurchases(r.Context(), profile.ClientID)
+	if err != nil {
+		respond.Error(w, r, http.StatusInternalServerError, "store_error", "Failed to load purchases")
+		return
+	}
+	respond.JSON(w, r, http.StatusOK, map[string]any{"items": items})
 }

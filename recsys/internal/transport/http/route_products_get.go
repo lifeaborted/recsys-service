@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"time"
 
+	"recsys/internal/auth"
 	"recsys/internal/transport/http/respond"
 )
 
@@ -45,6 +46,12 @@ func (s *Server) handleGetProducts(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query().Get("q")
 	withHistory := r.URL.Query().Get("with_history") == "1" || r.URL.Query().Get("with_history") == "true"
 
+	profile, _ := auth.Current(r.Context())
+	if withHistory && profile.Role != "admin" {
+		respond.Error(w, r, http.StatusForbidden, "admin_required", "Administrator access required")
+		return
+	}
+
 	var items []ProductDTO
 	var total int64
 	var err error
@@ -60,6 +67,12 @@ func (s *Server) handleGetProducts(w http.ResponseWriter, r *http.Request) {
 	}
 	if items == nil {
 		items = []ProductDTO{}
+	}
+
+	if profile.Role != "admin" {
+		for i := range items {
+			items[i].HasHistory = false
+		}
 	}
 
 	out := productsResponseDTO{Items: items, Total: total, Limit: limit, Offset: offset}

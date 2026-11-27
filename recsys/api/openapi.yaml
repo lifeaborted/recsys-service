@@ -242,6 +242,8 @@ paths:
                 $ref: '#/components/schemas/ScoreHistory'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: Administrator access required
   /stats:
     get:
       operationId: getStats
@@ -266,7 +268,7 @@ paths:
           schema: {type: integer, minimum: 1, maximum: 100, default: 10}
       responses:
         '200':
-          description: Recent stand runs for the session profile
+          description: Recent stand runs for the administrator profile
           headers:
             X-Request-ID:
               $ref: '#/components/headers/XRequestID'
@@ -276,6 +278,8 @@ paths:
                 $ref: '#/components/schemas/RunList'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: Administrator access required
     post:
       operationId: createRun
       requestBody:
@@ -302,6 +306,8 @@ paths:
                 $ref: '#/components/schemas/Error'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: Administrator access required
   /events:
     post:
       operationId: createEvent
@@ -332,6 +338,8 @@ paths:
                 $ref: '#/components/schemas/Error'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: Administrator access required
         '404':
           description: Run or offer not found for this profile
           content:
@@ -339,6 +347,30 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
   /purchases:
+    get:
+      operationId: listPurchases
+      responses:
+        '200':
+          description: Up to 100 most recent purchases of the authenticated profile
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [order_id, title, purchased_at]
+                      properties:
+                        order_id: {type: string}
+                        title: {type: string}
+                        purchased_at: {type: string, format: date-time}
+                        total: {type: number}
+                        currency: {type: string}
+        '401':
+          $ref: '#/components/responses/Unauthorized'
     post:
       operationId: createPurchase
       requestBody:
@@ -405,6 +437,10 @@ paths:
         - in: query
           name: limit
           schema: {type: integer, minimum: 1, maximum: 36}
+        - name: mode
+          in: query
+          description: Clean preset or the latest active authenticated test session
+          schema: {type: string, enum: [clean, latest], default: clean}
       responses:
         '200':
           description: Preview recommendations, table counts, and recorded runs

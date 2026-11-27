@@ -160,16 +160,31 @@ export async function purchase(cfg: RecsysClientConfig, itemId: string): Promise
   await request(cfg, "/purchases", { method: "POST", body: JSON.stringify({ item_id: itemId }) });
 }
 
+export interface PurchaseHistoryItem {
+  order_id: string;
+  title: string;
+  purchased_at: string;
+  total?: number;
+  currency?: string;
+}
+
+export function listPurchases(cfg: RecsysClientConfig, signal?: AbortSignal): Promise<{ items: PurchaseHistoryItem[] }> {
+  return request(cfg, "/purchases", { signal });
+}
+
+export type DebugMode = "clean" | "latest";
 export type DebugTarget = "guest" | "notver" | "verb2b" | "verb2c" | "admin";
 
 export interface RecommendationDiagnostics {
   target: DebugTarget;
+  mode: DebugMode;
+  session?: { started_at: string; purchase_count: number };
   duration_ms: number;
   recommendations: Recommendations;
   tables: Record<string, number>;
   runs: unknown[];
 }
 
-export function getRecommendationDiagnostics(cfg: RecsysClientConfig, target: DebugTarget, signal?: AbortSignal) {
-  return request<RecommendationDiagnostics>(cfg, `/admin/recommendations?target=${encodeURIComponent(target)}&limit=36`, { signal });
+export function getRecommendationDiagnostics(cfg: RecsysClientConfig, target: DebugTarget, mode: DebugMode, signal?: AbortSignal) {
+  return request<RecommendationDiagnostics>(cfg, `/admin/recommendations?target=${encodeURIComponent(target)}&limit=36&mode=${mode}`, { signal });
 }

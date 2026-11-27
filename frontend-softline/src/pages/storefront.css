@@ -203,3 +203,13 @@
   .store-mobile-nav a { display: grid; justify-items: center; gap: 4px; }
   .store-mobile-nav [aria-current="page"] { color: var(--store-accent); }
 }
+
+.store-header__service-menu { display: none; }
+@media (max-width: 1023px) {
+  .store-header__service-menu { display: block; padding: 4px 0; color: var(--store-accent); }
+  .store-header__service-menu summary { cursor: pointer; }
+  .store-header__service-menu nav { display: flex; flex-wrap: wrap; gap: 8px 16px; padding-block: 6px; }
+}
+@media (max-width: 767px) {
+  .store-header__service-menu { padding-inline: 16px; }
+}

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getRecommendationDiagnostics, type DebugTarget, type RecommendationDiagnostics } from "../api/recsysClient";
+import { ApiError, getRecommendationDiagnostics, type DebugMode, type DebugTarget, type RecommendationDiagnostics } from "../api/recsysClient";
 import type { GraphEdge, GraphNode, Recommendation } from "../api/recsysTypes";
 import { DemoGraphModal } from "../components/DemoGraphModal";
 import { DemoMetricsPanel } from "../components/DemoMetricsPanel";
@@ -17,6 +17,7 @@ const profiles: ReadonlyArray<{ id: DebugTarget; label: string }> = [
 ];
 
 function AdminDiagnostics({ token }: { token: string }) {
+  const [mode, setMode] = useState<DebugMode>("clean");
   const [target, setTarget] = useState<DebugTarget>("guest");
   const [data, setData] = useState<RecommendationDiagnostics | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -28,13 +29,18 @@ function AdminDiagnostics({ token }: { token: string }) {
     setData(null);
     setError(null);
     setGraph(null);
-    void getRecommendationDiagnostics(client(token), target, controller.signal).then((result) => {
+    void getRecommendationDiagnostics(client(token), target, mode, controller.signal).then((result) => {
       if (!controller.signal.aborted) setData(result);
     }).catch((cause: unknown) => {
-      if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : "Ошибка диагностики");
+      if (controller.signal.aborted) return;
+      if (cause instanceof ApiError && cause.code === "preview_session_not_found") {
+        setError("Активной сессии пока нет. Откройте чистый сценарий или войдите в выбранный аккаунт.");
+        return;
+      }
+      setError(cause instanceof Error ? cause.message : "Ошибка диагностики");
     });
     return () => controller.abort();
-  }, [revision, target, token]);
+  }, [revision, target, mode, token]);
 
   return (
     <>
@@ -42,8 +48,15 @@ function AdminDiagnostics({ token }: { token: string }) {
       <div className="preview-controls">
         <label>
           Профиль для проверки
-          <select value={target} onChange={(event) => setTarget(event.target.value as DebugTarget)}>
+          <select value={target} onChange={(event) => { setTarget(event.target.value as DebugTarget); setMode("clean"); }}>
             {profiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.label}</option>)}
+          </select>
+        </label>
+        <label>
+          История
+          <select aria-label="История" value={mode} onChange={(event) => setMode(event.target.value as DebugMode)}>
+            <option value="clean">Чистый сценарий</option>
+            {target !== "guest" && target !== "admin" && <option value="latest">Последняя активная сессия</option>}
           </select>
         </label>
         <button className="clone-link-btn clone-link-btn_primary" type="button" onClick={() => setRevision((n) => n + 1)}>Обновить</button>
@@ -53,6 +66,10 @@ function AdminDiagnostics({ token }: { token: string }) {
           <p className="preview-meta">
             Снимок <b>{data.recommendations.snapshot_id}</b> · {data.duration_ms} мс · запрос {data.recommendations.request_id}
           </p>
+          {data.session && <p className="preview-meta">
+            Вход {new Date(data.session.started_at).toLocaleString("ru-RU")} · покупок {data.session.purchase_count}
+          </p>}
+          {!data.recommendations.items.length && <p>Для выбранной истории подходящих рекомендаций пока нет.</p>}
           <div className="preview-grid">
             {data.recommendations.items.map((item) => {
               const edges = data.recommendations.graph.edges.filter((edge) => item.evidence_ids.includes(edge.id));
@@ -82,6 +99,7 @@ function AdminDiagnostics({ token }: { token: string }) {
         <p>Qwen предложила связь «дополнение». Проверка источника подтвердила разницу функций, поэтому предложение о дополнении осталось на проверке.</p>
         <a href="https://www.microsoft.com/en/microsoft-365/business/with-teams-plans-and-pricing" target="_blank" rel="noreferrer">Таблица сравнения Microsoft</a>
       </details>
+      <p><a href="#/demo-product">История оценок по товарам</a></p>
       <DemoMetricsPanel />
       {graph ? <DemoGraphModal {...graph} onClose={() => setGraph(null)} /> : null}
     </>

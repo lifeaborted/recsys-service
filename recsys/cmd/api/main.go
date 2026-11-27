@@ -103,8 +103,16 @@ func (a pgTransportAdapter) CreatePurchase(ctx context.Context, clientID domain.
 	}, nil
 }
 
-func (a pgTransportAdapter) LatestPreviewClient(ctx context.Context, template domain.ClientID) (domain.ClientID, error) {
-	return a.store.LatestPreviewClient(ctx, template)
+func (a pgTransportAdapter) LatestPreviewSession(ctx context.Context, template domain.ClientID) (contract.PreviewSession, error) {
+	return a.store.LatestPreviewSession(ctx, template)
+}
+
+func (a pgTransportAdapter) ListPurchases(ctx context.Context, clientID domain.ClientID) ([]contract.PurchaseHistoryItem, error) {
+	return a.store.ListPurchases(ctx, clientID)
+}
+
+func (m mockBackend) ListPurchases(_ context.Context, _ domain.ClientID) ([]contract.PurchaseHistoryItem, error) {
+	return []contract.PurchaseHistoryItem{}, nil
 }
 
 type mockRunsStore struct {

@@ -1,4 +1,6 @@
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { listPurchases, type PurchaseHistoryItem } from "../api/recsysClient";
+import { RECSYS_API, useSession } from "../state/session";
 import {
   INVOICES,
   INVOICE_STATUS,
@@ -6,12 +8,8 @@ import {
   KEY_STATUS,
   NOTIFICATIONS,
   NOTIFICATION_STATUS,
-  ORDERS,
-  STATUS_LABELS,
-  findUser,
 } from "../data/account";
 import { formatPrice } from "../lib/format";
-import { useSettings } from "../state/settings";
 
 interface Column<T> {
   key: string;
@@ -21,17 +19,18 @@ interface Column<T> {
 
 interface TablePageProps<T> {
   title: string;
+  lead: string;
   columns: Array<Column<T>>;
   rows: T[];
   rowKey: (row: T) => string;
 }
 
-function TablePage<T>({ title, columns, rows, rowKey }: TablePageProps<T>) {
+function TablePage<T>({ title, lead, columns, rows, rowKey }: TablePageProps<T>) {
   return (
     <div className="react-page-inner">
       <h1>{title}</h1>
-      <p className="react-page__lead">Тестовые данные локального клона личного кабинета.</p>
-      <div className="clone-card">
+      <p className="react-page__lead">{lead}</p>
+      <div className="clone-card account-table-scroll">
         <table className="clone-table">
           <thead>
             <tr>
@@ -60,26 +59,39 @@ function TablePage<T>({ title, columns, rows, rowKey }: TablePageProps<T>) {
 }
 
 export function OrdersPage() {
+  const { profile } = useSession();
+  const token = profile?.token;
+  const [rows, setRows] = useState<PurchaseHistoryItem[] | null>(null);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    if (!token) return;
+    const controller = new AbortController();
+    void listPurchases({ baseUrl: RECSYS_API, transport: "http", token }, controller.signal)
+      .then((response) => { if (!controller.signal.aborted) setRows(response.items); })
+      .catch((cause: unknown) => {
+        if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : "Не удалось загрузить заказы.");
+      });
+    return () => controller.abort();
+  }, [token]);
+
+  if (error || !rows?.length) return (
+    <div className="react-page-inner">
+      <h1>Мои заказы</h1>
+      <p role={error ? "alert" : "status"}>{error || (rows ? "В этой сессии пока нет заказов." : "Загружаем заказы…")}</p>
+    </div>
+  );
   return (
     <TablePage
       title="Мои заказы"
+      lead="Тестовые покупки текущей сессии."
       columns={[
-        { key: "id", label: "Номер" },
-        { key: "date", label: "Дата" },
+        { key: "order_id", label: "Номер заказа" },
+        { key: "purchased_at", label: "Дата", render: (row) => new Date(row.purchased_at).toLocaleString("ru-RU") },
         { key: "title", label: "Продукт" },
-        { key: "vendor", label: "Вендор" },
-        { key: "sum", label: "Сумма", render: (row) => formatPrice(row.sum) },
-        {
-          key: "status",
-          label: "Статус",
-          render: (row) => {
-            const status = STATUS_LABELS[row.status];
-            return <span className={status.className}>{status.label}</span>;
-          },
-        },
+        { key: "total", label: "Сумма", render: (row) => formatPrice(row.total, row.currency) },
       ]}
-      rows={ORDERS}
-      rowKey={(row) => row.id}
+      rows={rows}
+      rowKey={(row) => row.order_id}
     />
   );
 }
@@ -88,6 +100,7 @@ export function InvoicesPage() {
   return (
     <TablePage
       title="Счета и платежи"
+      lead="Демонстрационные счета. Тестовые покупки не создают платёжных документов."
       columns={[
         { key: "id", label: "Номер" },
         { key: "date", label: "Дата" },
@@ -112,6 +125,7 @@ export function KeysPage() {
   return (
     <TablePage
       title="Ключи и дистрибутивы"
+      lead="Демонстрационные записи. Тестовые покупки не выпускают лицензии."
       columns={[
         { key: "id", label: "Ключ" },
         { key: "product", label: "Продукт" },
@@ -136,6 +150,7 @@ export function NotificationsPage() {
   return (
     <TablePage
       title="Уведомления"
+      lead="Демонстрационные уведомления."
       columns={[
         { key: "date", label: "Дата" },
         { key: "title", label: "Уведомление" },
@@ -160,19 +175,10 @@ interface StaticPageProps {
 }
 
 export function StaticPage({ title, text }: StaticPageProps) {
-  const { settings } = useSettings();
-  const user = findUser(settings.userId);
   return (
     <div className="react-page-inner">
       <h1>{title}</h1>
       <p className="react-page__lead">{text}</p>
-      <div className="clone-card">
-        <p>
-          <b>{user.name}</b>
-        </p>
-        <p>{user.email}</p>
-        <p>История покупок: {user.history.join(", ")}</p>
-      </div>
     </div>
   );
 }

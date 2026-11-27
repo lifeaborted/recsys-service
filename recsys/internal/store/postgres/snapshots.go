@@ -514,13 +514,18 @@ func (s *Store) publishSnapshot(ctx context.Context, snapshot contract.Snapshot,
 
 // Profile reads client metadata from recommendations.clients.
 func (s *Store) Profile(ctx context.Context, clientID domain.ClientID) (domain.Client, error) {
+	lookup, _, isScenario := previewScenario(clientID)
+	if !isScenario {
+		lookup = clientID
+	}
 	var grp, ctype, lk string
 	var industry, segment *string
 	err := s.pool.QueryRow(ctx, `
 		SELECT COALESCE(client_group, ''), COALESCE(client_type, ''), industry, segment, COALESCE(lk_access, '')
 		FROM recommendations.clients
 		WHERE client_id = $1
-	`, string(clientID)).Scan(&grp, &ctype, &industry, &segment, &lk)
+		  AND (NOT $2 OR EXISTS (SELECT 1 FROM recommendations.model_snapshots WHERE snapshot_id = 'demo-v1'))
+	`, string(lookup), isScenario).Scan(&grp, &ctype, &industry, &segment, &lk)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.Client{}, fmt.Errorf("%w: client %s", ErrNotFound, clientID)
 	}
@@ -540,6 +545,12 @@ func (s *Store) Profile(ctx context.Context, clientID domain.ClientID) (domain.C
 // History returns purchases for clientID. A zero throughWeek reads full current history
 // (historical sales plus isolated online profile purchases); non-zero filters inclusively by week.
 func (s *Store) History(ctx context.Context, clientID domain.ClientID, throughWeek time.Time) ([]domain.Sale, error) {
+	if _, item, ok := previewScenario(clientID); ok && throughWeek.IsZero() {
+		if item == "" {
+			return []domain.Sale{}, nil
+		}
+		return []domain.Sale{{ClientID: clientID, ItemID: item}}, nil
+	}
 	var rows pgx.Rows
 	var err error
 	if throughWeek.IsZero() {

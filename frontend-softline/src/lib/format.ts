@@ -1,4 +1,4 @@
-const numberFormat = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 });
+const numberFormat = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 2 });
 
 const dateTimeFormat = new Intl.DateTimeFormat("ru-RU", {
   day: "2-digit",

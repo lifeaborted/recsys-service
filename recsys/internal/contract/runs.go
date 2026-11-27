@@ -41,3 +41,21 @@ type RunsStore interface {
 	ListRuns(ctx context.Context, clientID domain.ClientID, limit int) ([]RunRecord, error)
 	CreateEvent(ctx context.Context, clientID domain.ClientID, runID int64, offerID, eventType string) error
 }
+
+const PreviewScenarioPrefix = "SCENARIO-"
+
+var ErrPreviewSessionUnavailable = errors.New("no active preview session")
+
+type PreviewSession struct {
+	ClientID      domain.ClientID `json:"-"`
+	StartedAt     time.Time       `json:"started_at"`
+	PurchaseCount int             `json:"purchase_count"`
+}
+
+type PurchaseHistoryItem struct {
+	OrderID     string    `json:"order_id"`
+	Title       string    `json:"title"`
+	PurchasedAt time.Time `json:"purchased_at"`
+	Total       *float64  `json:"total,omitempty"`
+	Currency    *string   `json:"currency,omitempty"`
+}

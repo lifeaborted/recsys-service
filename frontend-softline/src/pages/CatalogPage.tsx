@@ -58,7 +58,7 @@ export function CatalogPage() {
     <div className="react-page-inner">
       <h1>Продукты</h1>
       <p className="react-page__lead">
-        Карточки товаров из текущего фида PostgreSQL. Поиск и постраничный просмотр.
+        Подберите товар по названию или артикулу.
       </p>
 
       <div className="clone-toolbar">

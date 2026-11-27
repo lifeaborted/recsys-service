@@ -323,11 +323,13 @@ export async function fetchProductDetail(
 export async function fetchScoreHistory(
   config: RecsysConfig,
   itemID: string,
+  signal?: AbortSignal,
 ): Promise<ScoreHistory> {
   const payload = await request<unknown>(
     config,
     `/products/${encodeURIComponent(itemID)}/score-history`,
     { method: "GET" },
+    signal,
   );
   const record = isRecord(payload) ? payload : {};
   const rawPoints = Array.isArray(record.points) ? record.points : [];

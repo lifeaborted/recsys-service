@@ -1,3 +1,4 @@
+import { formatPrice } from "../lib/format";
 import type { Recommendation } from "../api/recsysTypes";
 
 interface Props {
@@ -29,8 +30,9 @@ export function PortalRecommendationShelf({ loading, error, items, empty, onFavo
                 <path strokeLinejoin="round" d="M12 2.7 21 8v8l-9 5.3L3 16V8l9-5.3ZM3 8l9 5.3L21 8m-9 5.3v8M7.5 5.3l9 5.3v4.1" />
               </svg>
             </div>
-            {item.sku && <span className="portal-suggestion__sku">{item.sku}</span>}
+            {item.category && <span className="portal-suggestion__sku">{item.category}</span>}
             <h3>{href ? <a href={href}>{item.title}</a> : item.title}</h3>
+            {item.price != null && <strong>{formatPrice(item.price, item.currency_code)}</strong>}
             {item.explanation && <details>
               <summary>Почему рекомендуем</summary>
               <p>{item.explanation}</p>

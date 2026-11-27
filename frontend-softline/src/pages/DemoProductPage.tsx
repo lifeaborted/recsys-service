@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   fetchProductDetail,
   fetchProductsPage,
@@ -7,6 +7,8 @@ import {
   type ProductPage,
 } from "../api/client";
 import type { ProductDetail, ScoreHistory } from "../api/types";
+import { purchase } from "../api/recsysClient";
+import { CatalogPage } from "./CatalogPage";
 import { DemoScoreModal } from "../components/DemoScoreModal";
 import { formatPrice } from "../lib/format";
 import { getRouteParam } from "../lib/routes";
@@ -39,20 +41,30 @@ export function DemoProductPage() {
   const [scoreHistory, setScoreHistory] = useState<ScoreHistory | null>(null);
   const [scoreError, setScoreError] = useState<string | null>(null);
   const [scoreLoading, setScoreLoading] = useState(false);
+  const scoreRequest = useRef<AbortController | null>(null);
+  const [purchaseNotice, setPurchaseNotice] = useState("");
+  const [buying, setBuying] = useState(false);
+  const isAdmin = session.profile?.role === "admin";
 
   const token = session.profile?.token ?? "";
   const baseUrl = RECSYS_API;
 
   const openScore = (target: string) => {
+    if (!isAdmin) return;
+    scoreRequest.current?.abort();
+    const controller = new AbortController();
+    scoreRequest.current = controller;
     setScoreHistory(null);
     setScoreError(null);
     setScoreLoading(true);
-    fetchScoreHistory({ baseUrl, token, timeoutMs: settings.timeoutMs }, target)
+    fetchScoreHistory({ baseUrl, token, timeoutMs: settings.timeoutMs }, target, controller.signal)
       .then((result) => {
+        if (controller.signal.aborted) return;
         setScoreHistory(result);
         setScoreLoading(false);
       })
       .catch((cause: unknown) => {
+        if (controller.signal.aborted) return;
         setScoreError(cause instanceof RecsysError || cause instanceof Error ? cause.message : "Не удалось загрузить график");
         setScoreLoading(false);
       });
@@ -60,15 +72,23 @@ export function DemoProductPage() {
 
   useEffect(() => {
     const sync = () => {
+      scoreRequest.current?.abort();
+      setScoreHistory(null);
+      setScoreLoading(false);
+      setScoreError(null);
+      setPurchaseNotice("");
       setItemID(getRouteParam("item") ?? "");
       setPage(0);
     };
     window.addEventListener("hashchange", sync);
-    return () => window.removeEventListener("hashchange", sync);
+    return () => {
+      window.removeEventListener("hashchange", sync);
+      scoreRequest.current?.abort();
+    };
   }, []);
 
   useEffect(() => {
-    if (itemID) return;
+    if (itemID || !isAdmin) return;
     if (!token) {
       setListError("Войдите на главной странице, чтобы открыть товар.");
       setListLoading(false);
@@ -90,7 +110,7 @@ export function DemoProductPage() {
       setListLoading(false);
     });
     return () => controller.abort();
-  }, [itemID, token, baseUrl, settings.timeoutMs, page, query, withHistory, session.transport]);
+  }, [itemID, token, baseUrl, settings.timeoutMs, page, query, withHistory, session.transport, isAdmin]);
 
   useEffect(() => {
     if (!itemID || !token) return;
@@ -111,6 +131,21 @@ export function DemoProductPage() {
     });
     return () => controller.abort();
   }, [itemID, token, baseUrl, settings.timeoutMs, nonce]);
+
+  async function makePurchase(target: string) {
+    setBuying(true);
+    setPurchaseNotice("");
+    try {
+      await purchase({ baseUrl, token, transport: "http" }, target);
+      if (getRouteParam("item") === target) setPurchaseNotice("Тестовая покупка записана.");
+    } catch (cause) {
+      if (getRouteParam("item") === target) setPurchaseNotice(cause instanceof Error ? cause.message : "Не удалось оформить покупку.");
+    } finally {
+      setBuying(false);
+    }
+  }
+
+  if (!itemID && !isAdmin) return <CatalogPage />;
 
   if (!itemID) {
     const total = list?.total ?? 0;
@@ -210,10 +245,13 @@ export function DemoProductPage() {
   return (
     <div className="react-page-inner">
       <div className="demo-product__nav">
-        <a className="clone-link-btn" href="#/demo-product">← Все товары</a>
-        <a className="clone-link-btn" href="#/demo">← Назад к демо</a>
-        <button className="clone-link-btn" type="button" onClick={() => openScore(itemID)}>График score</button>
-        <span className="demo-product__id">{itemID}</span>
+        <a className="clone-link-btn" href="#/catalog">← В каталог</a>
+        {isAdmin && <>
+          <a className="clone-link-btn" href="#/demo-product">← Все товары</a>
+          <a className="clone-link-btn" href="#/recommendations">Отладка рекомендаций</a>
+          <button className="clone-link-btn" type="button" onClick={() => openScore(itemID)}>График score</button>
+          <span className="demo-product__id">{itemID}</span>
+        </>}
       </div>
 
       {loading ? <div className="demo-status">Загружаем данные товара…</div> : null}
@@ -243,13 +281,15 @@ export function DemoProductPage() {
                 {product.old_price ? <span>{formatPrice(product.old_price, product.currency_code || "RUB")}</span> : null}
               </div>
               <div className="demo-product__links">
-                {product.url ? (
+                {product.available && <button className="button button_primary button_size-l" type="button" disabled={buying} onClick={() => void makePurchase(product.item_id)}>Купить товар</button>}
+                {product.url && !product.item_id.startsWith("DEMO-") ? (
                   <a className="button button_primary button_size-l" href={product.url} target="_blank" rel="noreferrer">Открыть на сайте</a>
                 ) : null}
                 {product.vendor_url ? (
                   <a className="button button_default button_size-l" href={product.vendor_url} target="_blank" rel="noreferrer">Сайт производителя</a>
                 ) : null}
               </div>
+              {purchaseNotice && <p role="status">{purchaseNotice} <a href="#/orders">Мои заказы</a></p>}
               {product.sales_notes ? <p className="demo-product__notes">{product.sales_notes}</p> : null}
             </div>
           </div>
@@ -258,9 +298,7 @@ export function DemoProductPage() {
             <h3>Основная информация</h3>
             <div className="stat-grid demo-product__facts">
               {[
-                ["item_id", product.item_id],
-                ["offer_id", product.offer_id],
-                ["SKU", product.sku],
+                ...(isAdmin ? [["item_id", product.item_id], ["offer_id", product.offer_id], ["SKU", product.sku]] : []),
                 ["Категория", product.category],
                 ["Производитель", product.vendor],
                 ["Доставка", product.delivery ? "да" : "нет"],
@@ -277,13 +315,13 @@ export function DemoProductPage() {
 
           <div className="clone-card demo-product__section">
             <h3>Описание</h3>
-            <p className="demo-product__description">{product.description || "Описание в фиде отсутствует."}</p>
+            <p className="demo-product__description">{product.description || "Описание отсутствует."}</p>
           </div>
 
           <div className="clone-card demo-product__section">
             <div className="demo-product__section-head">
               <h3>Характеристики</h3>
-              <button className="clone-link-btn" type="button" onClick={() => setNonce((value) => value + 1)}>Обновить из БД</button>
+              {isAdmin && <button className="clone-link-btn" type="button" onClick={() => setNonce((value) => value + 1)}>Обновить из БД</button>}
             </div>
             {product.parameters.length ? (
               <table className="clone-table">
@@ -297,7 +335,7 @@ export function DemoProductPage() {
                 </tbody>
               </table>
             ) : (
-              <div className="reco-empty">Характеристик в фиде нет.</div>
+              <div className="reco-empty">Характеристики не указаны.</div>
             )}
           </div>
         </>

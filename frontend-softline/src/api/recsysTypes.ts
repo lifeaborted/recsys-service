@@ -20,6 +20,9 @@ export interface Recommendation {
   item_id: string;
   offer_id?: string;
   sku: string | null;
+  price?: number;
+  currency_code?: string;
+  category?: string;
   recommendation_kind: RecommendationKind;
   family_id: string | null;
   title: string;

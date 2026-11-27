@@ -136,9 +136,9 @@ func (s *Store) CreateSession(ctx context.Context, tokenHash []byte, accountID i
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return err
 	}
-	seedItem := map[string]string{"DEMO-VERB2B": "DEMO-BASE", "DEMO-VERB2C": "DEMO-B2C-1"}[template]
+	_, seedItem, _ := previewScenario(domain.ClientID(contract.PreviewScenarioPrefix + template))
 	if seedItem != "" {
-		if _, err := createPurchase(ctx, tx, domain.ClientID(isolatedClient), seedItem, createdAt); err != nil {
+		if _, err := createPurchase(ctx, tx, domain.ClientID(isolatedClient), string(seedItem), createdAt); err != nil {
 			return fmt.Errorf("seed preview history: %w", err)
 		}
 	}
@@ -712,4 +712,30 @@ func (r *SnapshotRecommender) loadFeatures(ctx context.Context, featureVersion s
 		out[f.ItemID] = f
 	}
 	return out, rows.Err()
+}
+
+// ListPurchases returns the most recent orders for the authenticated session.
+func (s *Store) ListPurchases(ctx context.Context, clientID domain.ClientID) ([]contract.PurchaseHistoryItem, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT p.order_id, p.item_name, p.purchased_at,
+		       (i.unit_price * i.quantity)::float8, i.currency_code
+		FROM recommendations.online_purchases p
+		LEFT JOIN recommendations.store_order_items i ON i.order_id = p.order_id AND i.offer_id = p.offer_id
+		WHERE p.client_id = $1
+		ORDER BY p.purchased_at DESC, p.purchase_id DESC
+		LIMIT 100
+	`, clientID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []contract.PurchaseHistoryItem{}
+	for rows.Next() {
+		var item contract.PurchaseHistoryItem
+		if err := rows.Scan(&item.OrderID, &item.Title, &item.PurchasedAt, &item.Total, &item.Currency); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
 }

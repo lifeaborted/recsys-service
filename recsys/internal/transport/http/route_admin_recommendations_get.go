@@ -2,6 +2,7 @@ package transporthttp
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"time"
 
@@ -37,15 +38,38 @@ func (s *Server) handleGetAdminRecommendations(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	if store, ok := s.stats.(interface {
-		LatestPreviewClient(context.Context, domain.ClientID) (domain.ClientID, error)
-	}); ok && target != "guest" && target != "admin" {
-		var err error
-		clientID, err = store.LatestPreviewClient(r.Context(), clientID)
+	mode := r.URL.Query().Get("mode")
+	if mode == "" {
+		mode = "clean"
+	}
+	var session *contract.PreviewSession
+	switch mode {
+	case "clean":
+		if target != "guest" {
+			clientID = domain.ClientID(contract.PreviewScenarioPrefix + string(clientID))
+		}
+	case "latest":
+		store, ok := s.stats.(interface {
+			LatestPreviewSession(context.Context, domain.ClientID) (contract.PreviewSession, error)
+		})
+		if target == "guest" || target == "admin" || !ok {
+			respond.Error(w, r, http.StatusBadRequest, "invalid_mode", "This profile has no selectable sessions")
+			return
+		}
+		rec, err := store.LatestPreviewSession(r.Context(), clientID)
+		if errors.Is(err, contract.ErrPreviewSessionUnavailable) {
+			respond.Error(w, r, http.StatusNotFound, "preview_session_not_found", "No active session for this profile")
+			return
+		}
 		if err != nil {
 			respond.Error(w, r, http.StatusInternalServerError, "profile_failed", "Failed to read preview profile")
 			return
 		}
+		session = &rec
+		clientID = rec.ClientID
+	default:
+		respond.Error(w, r, http.StatusBadRequest, "invalid_mode", "Unknown preview mode")
+		return
 	}
 
 	start := time.Now()
@@ -64,7 +88,7 @@ func (s *Server) handleGetAdminRecommendations(w http.ResponseWriter, r *http.Re
 			return
 		}
 	}
-	if s.runs != nil && target != "guest" {
+	if s.runs != nil && session != nil {
 		var err error
 		runs, err = s.runs.ListRuns(r.Context(), clientID, 20)
 		if err != nil {
@@ -73,10 +97,12 @@ func (s *Server) handleGetAdminRecommendations(w http.ResponseWriter, r *http.Re
 		}
 	}
 	respond.JSON(w, r, http.StatusOK, struct {
+		Mode           string                          `json:"mode"`
+		Session        *contract.PreviewSession        `json:"session,omitempty"`
 		Target         string                          `json:"target"`
 		DurationMillis int64                           `json:"duration_ms"`
 		Result         contract.RecommendationResponse `json:"recommendations"`
 		Tables         map[string]int64                `json:"tables"`
 		Runs           []contract.RunRecord            `json:"runs"`
-	}{target, elapsed, result, tables, runs})
+	}{mode, session, target, elapsed, result, tables, runs})
 }

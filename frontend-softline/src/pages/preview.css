@@ -36,3 +36,5 @@
   }
   .portal-sidebar-drawer .sidebar { width: min(100%, 320px); display: block; }
 }
+
+.account-table-scroll { max-width: 100%; overflow-x: auto; }

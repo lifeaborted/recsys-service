@@ -5,7 +5,10 @@ import (
 	"errors"
 
 	"fmt"
+	"strings"
+
 	"github.com/jackc/pgx/v5"
+	"recsys/internal/contract"
 
 	"recsys/internal/auth"
 	"recsys/internal/domain"
@@ -94,19 +97,37 @@ RETURNING account_id
 	return tx.Commit(ctx)
 }
 
-// LatestPreviewClient selects the latest active isolated profile for administrator diagnostics.
-func (s *Store) LatestPreviewClient(ctx context.Context, template domain.ClientID) (domain.ClientID, error) {
-	var clientID domain.ClientID
+// LatestPreviewSession selects the last active isolated profile and its purchase count.
+func (s *Store) LatestPreviewSession(ctx context.Context, template domain.ClientID) (contract.PreviewSession, error) {
+	var result contract.PreviewSession
 	err := s.pool.QueryRow(ctx, `
-		SELECT session.client_id
+		SELECT session.client_id, session.created_at,
+		       (SELECT count(*) FROM recommendations.online_purchases p WHERE p.client_id = session.client_id)
 		FROM recommendations.stand_sessions session
 		JOIN recommendations.stand_accounts account USING (account_id)
 		WHERE account.client_id = $1 AND session.client_id IS NOT NULL AND session.expires_at > now()
 		ORDER BY session.created_at DESC, session.client_id
 		LIMIT 1
-	`, template).Scan(&clientID)
+	`, template).Scan(&result.ClientID, &result.StartedAt, &result.PurchaseCount)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return template, nil
+		return result, contract.ErrPreviewSessionUnavailable
 	}
-	return clientID, err
+	return result, err
+}
+
+func previewScenario(clientID domain.ClientID) (domain.ClientID, domain.ItemID, bool) {
+	template, ok := strings.CutPrefix(string(clientID), contract.PreviewScenarioPrefix)
+	if !ok {
+		return "", "", false
+	}
+	switch template {
+	case "DEMO-NOTVER", "DEMO-ADMIN":
+		return domain.ClientID(template), "", true
+	case "DEMO-VERB2B":
+		return domain.ClientID(template), "DEMO-BASE", true
+	case "DEMO-VERB2C":
+		return domain.ClientID(template), "DEMO-B2C-1", true
+	default:
+		return "", "", false
+	}
 }

@@ -166,6 +166,12 @@ test("главная для гостя, три статуса и закрыта�
   const comparison = page.waitForResponse((r) => r.url().includes("/admin/recommendations?target=verb2b") && r.ok());
   await page.getByLabel("Профиль для проверки").selectOption("verb2b");
   await comparison;
+  assert.equal(await page.getByLabel("История", { exact: true }).inputValue(), "clean");
+  if (live) {
+    await page.getByLabel("История", { exact: true }).selectOption("latest");
+    await page.getByText(/покупок \d+/).waitFor();
+    await page.getByLabel("История", { exact: true }).selectOption("clean");
+  }
   await page.getByText("Ответ ранжирования, оценки и граф", { exact: true }).waitFor();
   await page.getByRole("button", { name: "Показать граф" }).first().click();
   await page.getByRole("dialog").waitFor();

@@ -76,11 +76,11 @@ function LoginDialog({ close }: { close: () => void }) {
       <button className="store-login__close" type="button" aria-label="Закрыть" onClick={close}><StoreIcon name="x-close" /></button>
       <h2 id="store-login-title">Вход на демостенд</h2>
       <p>Используйте выданный тестовый аккаунт.</p>
-      <form onSubmit={submit}>
+      <form onSubmit={submit} aria-busy={loading}>
         <label>Логин<input autoFocus value={name} onChange={(event) => setName(event.target.value)} autoComplete="username" required /></label>
         <label>Пароль<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" required /></label>
         {error && <p role="alert">{error}</p>}
-        <button className="store-primary" type="submit" disabled={loading}>Войти</button>
+        <button className="store-primary" type="submit" disabled={loading}>{loading ? "Выполняем вход…" : "Войти"}</button>
       </form>
     </dialog>
   );
@@ -143,6 +143,14 @@ export function StorefrontPage({ openLogin, restricted }: { openLogin: boolean; 
         <nav className="store-header__quick" aria-label="Контакты и ссылки">
           <a href="tel:88002000860">8 (800) 200-08-60</a><Links items={[infoLinks[0], categories[6], categories[7]]} />
         </nav>
+        <details className="store-header__service-menu">
+          <summary>Контакты и сервисы</summary>
+          <nav aria-label="Контакты и сервисы">
+            <a href="tel:88002000860">8 (800) 200-08-60</a>
+            <a href="mailto:sales.r@softline.com">sales.r@softline.com</a>
+            <Links items={infoLinks} />
+          </nav>
+        </details>
         {showCatalog && <nav id="store-categories" className="store-catalog-menu" aria-label="Каталог"><Links items={categories} /></nav>}
       </header>
       <main>
