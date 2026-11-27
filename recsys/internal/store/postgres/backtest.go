@@ -7,54 +7,79 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"recsys/internal/domain"
 	"recsys/internal/eval"
 )
 
-// EvaluationV4 reads the release marker and the sales from the same database snapshot.
+type EvaluationRelease struct {
+	Version       string
+	SHA           string
+	Sales         []eval.Sale
+	ProductGroups map[domain.ItemID]string
+}
+
 func (s *Store) EvaluationV4(ctx context.Context) (string, []eval.Sale, error) {
-	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{
-		IsoLevel:   pgx.RepeatableRead,
-		AccessMode: pgx.ReadOnly,
-	})
-	if err != nil {
-		return "", nil, err
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
+	release, err := s.EvaluationDataset(ctx, "v4")
+	return release.SHA, release.Sales, err
+}
 
-	var sha string
-	err = tx.QueryRow(ctx, `SELECT workbook_sha256 FROM recommendations.dataset_release WHERE version = 'v4'`).Scan(&sha)
+// EvaluationDataset reads release metadata and sales from the same database snapshot.
+func (s *Store) EvaluationDataset(ctx context.Context, version string) (EvaluationRelease, error) {
+	var release EvaluationRelease
+	if version != "" && version != "v4" && version != "v5" {
+		return release, fmt.Errorf("неподдерживаемый релиз %q", version)
+	}
+	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
+	if err != nil {
+		return release, err
+	}
+	defer tx.Rollback(ctx)
+
+	err = tx.QueryRow(ctx, `
+		SELECT version, workbook_sha256 FROM recommendations.dataset_release
+		WHERE version IN ('v4', 'v5') AND ($1 = '' OR version = $1)
+		ORDER BY version DESC LIMIT 1
+	`, version).Scan(&release.Version, &release.SHA)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return "", nil, fmt.Errorf("в базе отсутствует релиз v4")
+		return release, fmt.Errorf("в базе отсутствует запрошенный закрытый релиз %q", version)
 	}
 	if err != nil {
-		return "", nil, fmt.Errorf("проверить релиз v4: %w", err)
+		return release, fmt.Errorf("проверить закрытый релиз: %w", err)
 	}
 
-	rows, err := tx.Query(ctx, `
-		SELECT s.order_id, s.client_id, to_char(s.order_week, 'YYYY-MM-DD'), s.item_id, COALESCE(c.client_group, '')
+	const salesSQL = `
+		SELECT s.order_id, s.client_id, to_char(s.order_week, 'YYYY-MM-DD'), s.item_id, COALESCE(c.client_group, ''), %s
 		FROM recommendations.sales s
 		JOIN recommendations.clients c USING (client_id)
-	`)
+	`
+	groupColumn := "''::text"
+	if release.Version == "v5" {
+		groupColumn = "COALESCE(s.product_group, '')"
+		release.ProductGroups = make(map[domain.ItemID]string)
+	}
+	rows, err := tx.Query(ctx, fmt.Sprintf(salesSQL, groupColumn))
 	if err != nil {
-		return "", nil, err
+		return release, err
 	}
 	defer rows.Close()
-
-	var sales []eval.Sale
-	products := make(map[string]struct{})
 	for rows.Next() {
 		var sale eval.Sale
-		if err := rows.Scan(&sale.OrderID, &sale.ClientID, &sale.Week, &sale.ItemID, &sale.Group); err != nil {
-			return "", nil, err
+		var group string
+		if err := rows.Scan(&sale.OrderID, &sale.ClientID, &sale.Week, &sale.ItemID, &sale.Group, &group); err != nil {
+			return release, err
 		}
-		sales = append(sales, sale)
-		products[sale.ItemID] = struct{}{}
+		if release.Version == "v5" {
+			id := domain.ItemID(sale.ItemID)
+			prev, exists := release.ProductGroups[id]
+			if group == "" || (exists && prev != group) {
+				return release, fmt.Errorf("v5: missing or conflicting product_group for item %q", id)
+			}
+			release.ProductGroups[id] = group
+		}
+		release.Sales = append(release.Sales, sale)
 	}
 	if err := rows.Err(); err != nil {
-		return "", nil, err
+		return release, err
 	}
-	if len(sales) != 31753 || len(products) != 817 {
-		return "", nil, fmt.Errorf("неполный или изменённый релиз v4: %d строк, %d товаров", len(sales), len(products))
-	}
-	return sha, sales, tx.Commit(ctx)
+	return release, tx.Commit(ctx)
 }

@@ -49,10 +49,14 @@ func (s *Store) Products(ctx context.Context, snapshot string, ids []domain.Item
   SELECT i.item_id,COALESCE(f.title,i.item_id),f.offer_id,f.sku,f.url,COALESCE(f.platform,''),
    COALESCE(f.audience,''),COALESCE(f.available,false),
    COALESCE(f.in_sales, EXISTS(SELECT 1 FROM recommendations.sales sales WHERE sales.item_id=i.item_id)),
-   COALESCE(f.family_id,''),COALESCE(f.family_source,''),COALESCE(f.differences,'[]'::jsonb)
+   COALESCE(f.family_id,''),COALESCE(f.family_source,''),COALESCE(f.differences,'[]'::jsonb),COALESCE(f.organization_type,''),
+   COALESCE(v.name, vo.vendor_name, ''), COALESCE(o.category_id, vo.category_id, '')
   FROM recommendations.model_snapshots m
   JOIN recommendations.historical_items i ON i.item_id=ANY($2::text[])
   LEFT JOIN recommendations.item_feature_versions f ON f.feature_version=m.feature_version AND f.item_id=i.item_id
+  LEFT JOIN recommendations.catalog_offers o ON o.offer_id=f.offer_id
+  LEFT JOIN recommendations.catalog_vendors v ON v.vendor_id=o.vendor_id
+  LEFT JOIN recommendations.catalog_version_offers vo ON vo.catalog_version=m.catalog_version AND vo.offer_id=f.offer_id
   WHERE m.snapshot_id=$1
  `, snapshot, keys)
 	if err != nil {
@@ -63,7 +67,7 @@ func (s *Store) Products(ctx context.Context, snapshot string, ids []domain.Item
 		var id domain.ItemID
 		var p recommend.Product
 		if err := rows.Scan(&id, &p.Title, &p.OfferID, &p.SKU, &p.URL, &p.Platform, &p.Audience, &p.Available, &p.InSales,
-			&p.FamilyID, &p.FamilySource, &p.Differences); err != nil {
+			&p.FamilyID, &p.FamilySource, &p.Differences, &p.OrganizationType, &p.Vendor, &p.CategoryID); err != nil {
 			return nil, err
 		}
 		result[id] = p
@@ -92,14 +96,14 @@ func (s *Store) OfflineDataset(ctx context.Context) (contract.DatasetBatch, erro
 	if err != nil {
 		return batch, err
 	}
-	sales, err := tx.Query(ctx, `SELECT excel_row,order_id,client_id,order_week,item_id,sku,COALESCE(item_name,'')
+	sales, err := tx.Query(ctx, `SELECT excel_row,order_id,client_id,order_week,item_id,sku,COALESCE(item_name,''),COALESCE(product_group,'')
   FROM recommendations.sales ORDER BY excel_row`)
 	if err != nil {
 		return batch, err
 	}
 	batch.Sales, err = pgx.CollectRows(sales, func(row pgx.CollectableRow) (domain.Sale, error) {
 		var sale domain.Sale
-		err := row.Scan(&sale.SourceRow, &sale.OrderID, &sale.ClientID, &sale.OrderWeek, &sale.ItemID, &sale.SKU, &sale.ItemName)
+		err := row.Scan(&sale.SourceRow, &sale.OrderID, &sale.ClientID, &sale.OrderWeek, &sale.ItemID, &sale.SKU, &sale.ItemName, &sale.ProductGroup)
 		return sale, err
 	})
 	if err != nil {

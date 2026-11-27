@@ -27,6 +27,7 @@ recsys/bin/
 
 # Local-only handoff notes (kept out of git repository)
 recsys/tests/e2e/data/HANDOFF.md
+recsys/docs/session-2026-11-27.md
 
 *.env
 recommendations*.sql

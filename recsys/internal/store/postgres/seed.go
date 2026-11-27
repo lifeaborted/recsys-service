@@ -57,12 +57,12 @@ func (s *Store) SeedDemo(ctx context.Context, opts SeedOptions) error {
 	if !opts.AllowOnV4 {
 		var hasV4 bool
 		if err := s.pool.QueryRow(ctx, `
-			SELECT EXISTS (SELECT 1 FROM recommendations.dataset_release WHERE version = 'v4')
+			SELECT EXISTS (SELECT 1 FROM recommendations.dataset_release WHERE version IN ('v4', 'v5'))
 		`).Scan(&hasV4); err != nil {
 			return fmt.Errorf("check dataset_release: %w", err)
 		}
 		if hasV4 {
-			return fmt.Errorf("refusing to run demo seed against closed v4 database")
+			return fmt.Errorf("refusing to run demo seed against closed dataset database")
 		}
 	}
 

@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"recsys/internal/contract"
+	"recsys/internal/data"
 	"recsys/internal/domain"
 )
 
@@ -78,6 +79,7 @@ func (s *Store) WriteDatasetWithChecksum(ctx context.Context, version, workbookS
 	var clients []clientRow
 	var sales []saleRow
 	hasher := sha256.New()
+	productGroups := make(map[domain.ItemID]string)
 
 	nextClientRow := 2
 	nextSaleRow := 2
@@ -111,6 +113,13 @@ func (s *Store) WriteDatasetWithChecksum(ctx context.Context, version, workbookS
 				nextSaleRow = rowNum + 1
 			}
 			sale.SourceRow = rowNum
+			if ver == data.ExpectedV5Version && sale.ProductGroup == "" {
+				return fmt.Errorf("v5 requires product_group for each sale")
+			}
+			if previous, ok := productGroups[sale.ItemID]; ok && previous != sale.ProductGroup {
+				return fmt.Errorf("conflicting product_group for item %q", sale.ItemID)
+			}
+			productGroups[sale.ItemID] = sale.ProductGroup
 			sales = append(sales, saleRow{excelRow: rowNum, sale: sale})
 
 			if _, exists := seenClients[sale.ClientID]; !exists {
@@ -133,6 +142,9 @@ func (s *Store) WriteDatasetWithChecksum(ctx context.Context, version, workbookS
 	for _, sr := range sales {
 		_, _ = fmt.Fprintf(hasher, "S|%d|%s|%s|%s|%s\n",
 			sr.excelRow, sr.sale.OrderID, sr.sale.ClientID, sr.sale.OrderWeek.UTC().Format("2006-01-02"), sr.sale.ItemID)
+		if sr.sale.ProductGroup != "" {
+			_, _ = fmt.Fprintf(hasher, "G|%q\n", sr.sale.ProductGroup)
+		}
 	}
 	digest := strings.TrimSpace(workbookSHA256)
 	if digest == "" {
@@ -144,6 +156,19 @@ func (s *Store) WriteDatasetWithChecksum(ctx context.Context, version, workbookS
 		return fmt.Errorf("begin dataset tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	// Historical rows are shared across releases. Serialize dataset publication.
+	if _, err := tx.Exec(ctx, "LOCK TABLE recommendations.dataset_release IN SHARE ROW EXCLUSIVE MODE"); err != nil {
+		return fmt.Errorf("lock dataset releases: %w", err)
+	}
+	if ver != data.ExpectedV5Version {
+		var hasV5 bool
+		if err := tx.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM recommendations.dataset_release WHERE version = 'v5')").Scan(&hasV5); err != nil {
+			return fmt.Errorf("read dataset releases: %w", err)
+		}
+		if hasV5 {
+			return fmt.Errorf("import %q would replace the published v5 history", ver)
+		}
+	}
 
 	if _, err := tx.Exec(ctx, `
 		CREATE TEMP TABLE stg_clients (
@@ -163,7 +188,8 @@ func (s *Store) WriteDatasetWithChecksum(ctx context.Context, version, workbookS
 			order_week date NOT NULL,
 			item_id text NOT NULL,
 			sku text,
-			item_name text
+			item_name text,
+			product_group text
 		) ON COMMIT DROP;
 	`); err != nil {
 		return fmt.Errorf("create temp staging tables: %w", err)
@@ -218,12 +244,13 @@ func (s *Store) WriteDatasetWithChecksum(ctx context.Context, version, workbookS
 				string(sr.sale.ItemID),
 				sr.sale.SKU,
 				itemName,
+				sr.sale.ProductGroup,
 			}
 		}
 		if _, err := tx.CopyFrom(
 			ctx,
 			pgx.Identifier{"stg_sales"},
-			[]string{"excel_row", "order_id", "client_id", "order_week", "item_id", "sku", "item_name"},
+			[]string{"excel_row", "order_id", "client_id", "order_week", "item_id", "sku", "item_name", "product_group"},
 			pgx.CopyFromRows(saleCopyRows),
 		); err != nil {
 			return fmt.Errorf("COPY stg_sales: %w", err)
@@ -309,15 +336,15 @@ func (s *Store) WriteDatasetWithChecksum(ctx context.Context, version, workbookS
 		ON CONFLICT (order_id, order_week) DO NOTHING;
 
 		INSERT INTO recommendations.sales (
-			excel_row, order_id, client_id, order_week, item_id, sku, item_name
+			excel_row, order_id, client_id, order_week, item_id, sku, item_name, product_group
 		)
-		SELECT excel_row, order_id, client_id, order_week, item_id, sku, item_name
+		SELECT excel_row, order_id, client_id, order_week, item_id, sku, item_name, NULLIF(product_group, '')
 		FROM stg_sales;
 	`); err != nil {
 		return fmt.Errorf("publish staged dataset: %w", err)
 	}
 
-	if ver == "v4" {
+	if ver == "v4" || ver == "v5" {
 		var counts DatasetCounts
 		if err := tx.QueryRow(ctx, `
 			SELECT
@@ -337,6 +364,15 @@ func (s *Store) WriteDatasetWithChecksum(ctx context.Context, version, workbookS
 		}
 		if err := ValidateClosedV4Counts(counts); err != nil {
 			return err
+		}
+		if ver == data.ExpectedV5Version {
+			var groups int
+			if err := tx.QueryRow(ctx, "SELECT count(DISTINCT product_group) FROM stg_sales").Scan(&groups); err != nil {
+				return fmt.Errorf("count v5 product groups: %w", err)
+			}
+			if err := data.VerifyV5Release(ver, digest, counts.SalesRows, counts.DistinctItems, groups); err != nil {
+				return err
+			}
 		}
 	}
 

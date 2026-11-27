@@ -41,7 +41,7 @@ func attachEvidence(snapshot *contract.Snapshot, data contract.DatasetBatch, res
 	if result.SnapshotID != snapshot.ID || result.Feed.ID == "" || result.Feed.GeneratedAt.IsZero() {
 		return nil, fmt.Errorf("evidence artifact has invalid feed or belongs to another snapshot")
 	}
-	if snapshot.DatasetVersion == "v4" && result.Feed.GeneratedAt.Format(time.DateOnly) > snapshot.TrainThrough.Format(time.DateOnly) {
+	if (snapshot.DatasetVersion == "v4" || snapshot.DatasetVersion == "v5") && result.Feed.GeneratedAt.Format(time.DateOnly) > snapshot.TrainThrough.Format(time.DateOnly) {
 		return nil, fmt.Errorf("historical snapshot cannot use a feed generated after train-through")
 	}
 	snapshot.CatalogVersion = result.Feed.ID
@@ -74,6 +74,27 @@ func attachEvidence(snapshot *contract.Snapshot, data contract.DatasetBatch, res
 		}
 		if fact := offer.Facts["platform"]; fact.Value != nil && fact.Source != nil {
 			p.Platform = *fact.Value
+		}
+		if fact := offer.Facts["organization_type"]; fact.Value != nil && fact.Source != nil {
+			p.OrganizationType = strings.ToLower(strings.TrimSpace(*fact.Value))
+		}
+		if fact := offer.Facts["user_type"]; fact.Value != nil && fact.Source != nil {
+			switch strings.ToLower(strings.TrimSpace(*fact.Value)) {
+			case "юрлицо":
+				p.Audience = domain.B2B
+			case "физлицо":
+				p.Audience = domain.B2C
+			case "нко":
+				p.Audience = domain.B2B
+				if p.OrganizationType == "" || p.OrganizationType == "не определено" || p.OrganizationType == "некоммерческая" {
+					p.OrganizationType = "некоммерческая"
+				} else {
+					p.Available = false
+				}
+			case "", "не определено":
+			default:
+				p.Available = false
+			}
 		}
 		products[p.ItemID] = p
 	}
@@ -131,7 +152,7 @@ func attachEvidence(snapshot *contract.Snapshot, data contract.DatasetBatch, res
 			(kind != domain.Renewal && kind != domain.Upgrade && kind != domain.Complement) {
 			return nil, fmt.Errorf("invalid verified relation %q", ev.ID)
 		}
-		if snapshot.DatasetVersion == "v4" {
+		if snapshot.DatasetVersion == "v4" || snapshot.DatasetVersion == "v5" {
 			if relation.Source.ObservedAt.Format(time.DateOnly) > snapshot.TrainThrough.Format(time.DateOnly) {
 				return nil, fmt.Errorf("historical snapshot cannot use evidence observed after train-through")
 			}
@@ -162,8 +183,8 @@ func runDatabase(ctx context.Context, snapshotID, dataset, cutoff, evidencePath 
 	if err != nil || snapshotID == "" || dataset == "" {
 		return fmt.Errorf("supply -snapshot, -dataset and -train-through YYYY-MM-DD")
 	}
-	if dataset == "v4" && cutoff != "2026-08-31" {
-		return fmt.Errorf("v4 train-through must be 2026-08-31")
+	if (dataset == "v4" || dataset == "v5") && cutoff != "2026-08-31" {
+		return fmt.Errorf("%s train-through must be 2026-08-31", dataset)
 	}
 	store, err := postgres.OpenContext(ctx, config.Load().DatabaseURL)
 	if err != nil {

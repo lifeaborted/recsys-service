@@ -359,15 +359,20 @@ func readSalesCSV(
 				line, pg, itemID, prevPG)
 		}
 		productGroups[itemID] = pg
+		var persistedGroup string
+		if hasGroupCol {
+			persistedGroup = pg
+		}
 
 		sales = append(sales, domain.Sale{
-			SourceRow: line,
-			OrderID:   orderID,
-			ClientID:  clientID,
-			OrderWeek: orderWeek.UTC(),
-			ItemID:    itemID,
-			SKU:       optionalString(record[4]),
-			ItemName:  strings.TrimSpace(record[5]),
+			SourceRow:    line,
+			OrderID:      orderID,
+			ClientID:     clientID,
+			OrderWeek:    orderWeek.UTC(),
+			ItemID:       itemID,
+			SKU:          optionalString(record[4]),
+			ItemName:     strings.TrimSpace(record[5]),
+			ProductGroup: persistedGroup,
 		})
 	}
 	return sales, productGroups, hasGroupCol, nil

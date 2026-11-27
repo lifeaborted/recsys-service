@@ -30,6 +30,21 @@ function expiryOf(variant: Variant): string | null {
   return `до ${String(difference.value)}`;
 }
 
+function evidenceURL(edge: GraphEdge): string | null {
+  if (edge.type !== "upgrade" && edge.type !== "complement" && edge.type !== "renewal") {
+    return null;
+  }
+  const reference = edge.source.replace(/@[^@/#?\s]+#[^@#\s]+$/, "");
+  try {
+    const url = new URL(reference);
+    return (url.protocol === "https:" || url.protocol === "http:") && !url.username && !url.password
+      ? url.href
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 export function DemoRecommendationCard({ item, edges, onPurchase, busy }: DemoRecommendationCardProps) {
   const [showVariants, setShowVariants] = useState(false);
   const [showReason, setShowReason] = useState(false);
@@ -94,14 +109,20 @@ export function DemoRecommendationCard({ item, edges, onPurchase, busy }: DemoRe
           </button>
           {showReason ? (
             <div style={{ marginTop: 10 }}>
-              {edges.map((edge) => (
-                <div key={edge.id}>
-                  <p className="demo-card__reason">{edge.reason}</p>
-                  <div className="demo-card__source">
-                    {edge.type} · {edge.source} · {edge.from} → {edge.to}
+              {edges.map((edge) => {
+                const url = evidenceURL(edge);
+                return (
+                  <div key={edge.id}>
+                    <p className="demo-card__reason">{edge.reason}</p>
+                    <div className="demo-card__source">
+                      {edge.type} · {edge.source} · {edge.from} → {edge.to}
+                      {url ? (
+                        <> · <a className="demo-card__link" href={url} target="_blank" rel="noreferrer">Открыть источник</a></>
+                      ) : null}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : null}
         </div>

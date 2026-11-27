@@ -22,11 +22,12 @@ type Client struct {
 }
 
 type Sale struct {
-	SourceRow int
-	OrderID   string
-	ClientID  ClientID
-	OrderWeek time.Time
-	ItemID    ItemID
-	SKU       *string
-	ItemName  string
+	SourceRow    int
+	OrderID      string
+	ClientID     ClientID
+	OrderWeek    time.Time
+	ItemID       ItemID
+	SKU          *string
+	ItemName     string
+	ProductGroup string
 }

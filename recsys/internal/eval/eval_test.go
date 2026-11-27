@@ -347,6 +347,10 @@ func TestDataModule(t *testing.T) {
 			t.Fatalf("EvaluateRecommender with v5 ProductGroups failed: %v", err)
 		}
 		pgFam := pgReport.Results[0].Families
+		pgMetrics := pgReport.Results[0].Metrics
+		if pgMetrics.VariantHits != 1 || pgMetrics.NewProductHits != 2 || pgMetrics.VariantShare != pgFam.KnownFamilyShare() {
+			t.Fatalf("hybrid metrics do not reflect the canonical split: %+v", pgMetrics)
+		}
 		if pgFam.TotalHits != 3 || pgFam.KnownFamilyHits != 1 || pgFam.NewFamilyHits != 2 || pgFam.UnknownFamilyHits != 0 {
 			t.Fatalf("expected 1 known-family variant and 2 new-product hits via canonical ProductGroups, got %+v", pgFam)
 		}

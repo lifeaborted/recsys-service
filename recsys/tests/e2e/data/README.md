@@ -16,17 +16,14 @@
 | `internal/eval/hybrid.go` | Оценка гибридного движка `contract.Recommender` в режиме `contract.Backtest` с фиксированным `SnapshotID` и локальным интерфейсом `eval.Backtest`: только верхнеуровневые карточки (до 3), фильтр пространства 817 исторических товаров, холодные товары, разбивка по семействам и раскрытие потенциальной утечки из будущего. |
 | `internal/eval/v4.go` | Проверка закрытой базы v4 (`VerifyV4Evaluation`, `CheckEvalAnonymization`). |
 | `internal/eval/baseline_test.go`, `internal/eval/eval_test.go` | Набор тестов `TestDataModule` и регрессий baseline/гибрида с ручными дробями. |
-| `cmd/import/main.go` | CLI валидации/пакетного импорта CSV (`-dry-run` / `-check-anonymization`) и верификации закрытой БД v4 (`-verify-v4`). |
-| `cmd/backtest/main.go` | CLI исторического бэктеста на закрытой БД v4 или на CSV-файлах v5 / синтетики (`-label demo`). |
+| `cmd/import/main.go` | CLI валидации/пакетного импорта CSV (`-dry-run` / `-check-anonymization`) и верификации закрытой БД (`-verify-v4` / `-verify-v5`). |
+| `cmd/backtest/main.go` | CLI исторического бэктеста на закрытой БД v4/v5 или на CSV-файлах v5 / синтетики (`-label demo`). |
 
 ---
 
-## 2. Актуальные данные: v5 книга и текущая БД v4
+## 2. Книга и БД v5
 
-На момент подготовки модуля:
-- **Исходная книга организаторов обновилась до v5** (`Датасет_Рекомендации_ЛК_v5.xlsx`, `SHA-256: 56e3c100cd600f1e0d8daf02989b3a0f82a633fa727d30aa49b4d778ef1b0c65`) и скрипт `baseline.py` обновлён под v5 (`SHA-256: 4e8906ff0e1d4b39403b6924175c28268604ff58d10dfcc75015284cd3c7c64e`).
-- **Обновлённого дампа БД для v5 пока нет** — в PostgreSQL (`recommendations.sql`, база `recsys`) загружен дамп **v4** (`SHA-256: 7e219b81f22c51a6a3060e22d7e74657034b8b1d752c3ffaa2c6fa189bb666f4`), в таблице `recommendations.sales` пока нет колонки `product_group`.
-- Все 6 первых колонок `Продажи` (`31 753` строки) и все колонки `Клиенты` (`19 008` строк) в v5 полностью совпадают с дампом v4 (`0` расхождений).
+Дамп `recommendations-v5.sql` включает `recommendations.sales.product_group`, метаданные релиза и исторический снимок. PostgreSQL принимает официальный импорт v5 через CSV с SHA-256 книги. Команды проверки и бэктеста приведены в [README](../../README.md#закрытая-оценка-v5). Ниже v4 упоминается для формата прежнего релиза и сравнения с ним.
 
 ### Формат CSV
 
@@ -100,7 +97,7 @@
    - Не отбрасывать `SKU == nil`, товары без матча в `historical_item_offers` и клиентов с `HasLKAccess == false`.
    - Хранить `(version, workbook_sha256)` в `recommendations.dataset_release`.
 2. **Контракт `Backtest`:** перенести интерфейс `eval.Backtest` (`Run(ctx, rec, cfg) (HybridReport, error)`) из `internal/eval/hybrid.go` в `internal/contract` при финальной сборке.
-3. **Расширение `EvaluationV4` / снимков БД:** после появления дампа БД v5 добавить хранение/чтение `sales.product_group`, передачу `catalog_snapshots.feed_generated_at`, списка `historical_items` (817) и подтверждённых семейств в адаптер оценки.
+3. **Расширение `EvaluationV4` / снимков БД:** для v5 используется хранение/чтение `sales.product_group`, передачу `catalog_snapshots.feed_generated_at`, списка `historical_items` (817) и подтверждённых семейств в адаптер оценки.
 4. **Переменная БД:** `.env.example` использует `DATABASE_URL`, а `internal/config/config.go` — `RECSYS_DATABASE_URL`. Наши CLI читают `RECSYS_DATABASE_URL` с фоллбэком на `DATABASE_URL`.
 
 ### Для зоны 2 (`internal/recommend`)

@@ -51,6 +51,10 @@ func configFromEnv(prefix string) Config {
 const timeout = 15 * time.Second
 
 func request(ctx context.Context, config Config, endpoint string, payload, response any) error {
+	return requestWithTimeout(ctx, config, endpoint, payload, response, timeout)
+}
+
+func requestWithTimeout(ctx context.Context, config Config, endpoint string, payload, response any, deadline time.Duration) error {
 	base, err := url.Parse(config.BaseURL)
 	if err != nil || base.Hostname() == "" || base.User != nil || base.RawQuery != "" || base.Fragment != "" ||
 		(base.Scheme != "https" && base.Scheme != "http") || strings.TrimSpace(config.Model) == "" {
@@ -60,7 +64,7 @@ func request(ctx context.Context, config Config, endpoint string, payload, respo
 	if err != nil {
 		return err
 	}
-	ctx, cancel := context.WithTimeout(ctx, timeout)
+	ctx, cancel := context.WithTimeout(ctx, deadline)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(base.String(), "/")+endpoint, bytes.NewReader(body))
 	if err != nil {
