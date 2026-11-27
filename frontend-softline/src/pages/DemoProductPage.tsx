@@ -120,9 +120,9 @@ export function DemoProductPage() {
       <div className="react-page-inner">
         <div className="clone-card demo-product__section">
           <div className="demo-product__section-head">
-            <div>
+            <div className="demo-product__title-row">
               <h3>Все товары из БД</h3>
-              <p className="demo-count">Найдено: <strong>{total.toLocaleString("ru-RU")}</strong></p>
+              <span className="demo-count">Найдено: <strong>{total.toLocaleString("ru-RU")}</strong></span>
             </div>
             <div className="demo-product__search">
               <input

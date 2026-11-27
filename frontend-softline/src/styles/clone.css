@@ -259,6 +259,8 @@
   border-radius: 8px;
   font: inherit;
 }
+.demo-product__title-row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.demo-product__title-row h3 { margin: 0; }
 .demo-count {
   display: inline-flex;
   align-items: center;
