@@ -122,7 +122,7 @@ export function DemoProductPage() {
           <div className="demo-product__section-head">
             <div>
               <h3>Все товары из БД</h3>
-              <p className="demo-product__notes">Найдено: {total}</p>
+              <p className="demo-count">Найдено: <strong>{total.toLocaleString("ru-RU")}</strong></p>
             </div>
             <div className="demo-product__search">
               <input
@@ -136,7 +136,7 @@ export function DemoProductPage() {
                 }}
               />
               <button className="clone-link-btn" type="button" onClick={() => { setQuery(""); setPage(0); }}>Сбросить</button>
-              <label className="reco-limit">
+              <label className="demo-check">
                 <input
                   type="checkbox"
                   checked={withHistory}
@@ -145,7 +145,7 @@ export function DemoProductPage() {
                     setPage(0);
                   }}
                 />
-                Только с историей оценок
+                <span>Только с историей оценок</span>
               </label>
             </div>
           </div>

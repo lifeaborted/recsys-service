@@ -63,7 +63,7 @@ export function CatalogPage() {
           }}
           placeholder="Название или артикул"
         />
-        <span className="reco-chip">Найдено: {total}</span>
+        <span className="demo-count">Найдено: <strong>{total.toLocaleString("ru-RU")}</strong></span>
       </div>
 
       {loading ? <div className="demo-status">Загружаем каталог…</div> : null}
