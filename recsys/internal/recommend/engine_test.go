@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"strings"
+
 	"recsys/internal/contract"
 	"recsys/internal/domain"
 )
@@ -83,20 +85,16 @@ func TestRecommendModule(t *testing.T) {
 		m.add(contract.CandidateKey{Signal: "renewal", SourceItemID: base}, id)
 	}
 	r := run()
-	if len(r.Items) != 1 || r.PartialReason == nil {
-		t.Fatalf("partial result: %+v", r)
-	}
-	item := r.Items[0]
-	if item.Kind != domain.Renewal || item.ItemID != short || len(item.Variants) != 2 || item.Variants[0].Differences[0].Value != 12 || item.Variants[1].Differences[0].Value != 24 || item.Explanation == "" {
-		t.Fatalf("renewal: %+v", item)
+	if len(r.Items) != 0 || r.PartialReason == nil {
+		t.Fatalf("online renewal stays out of the recommendation block: %+v", r)
 	}
 	if !reflect.DeepEqual(r, run()) {
 		t.Fatal("unstable response")
 	}
 	m.history = append(m.history, domain.Sale{ItemID: short, OrderWeek: m.cutoff.AddDate(0, 0, 7)})
 	r = run()
-	if len(r.Items) != 1 || r.Items[0].ItemID != long || len(r.Items[0].Variants) != 1 {
-		t.Fatalf("purchased variant returned: %+v", r)
+	if len(r.Items) != 0 {
+		t.Fatalf("purchased renewal returned online: %+v", r.Items)
 	}
 	query.Mode = contract.Backtest
 	query.SnapshotID = "s"
@@ -257,7 +255,7 @@ func TestOnlineDropsSameCategoryRival(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := itemIDs(online)
-	if !reflect.DeepEqual(got, []domain.ItemID{"kas-renew", "office"}) {
+	if !reflect.DeepEqual(got, []domain.ItemID{"office"}) {
 		t.Fatalf("online cards: %v", got)
 	}
 	back, err := engine.Recommend(context.Background(), contract.RecommendationQuery{ClientID: "u", Mode: contract.Backtest, SnapshotID: "s"})
@@ -320,5 +318,163 @@ func TestOnlineRerankReordersOnlyTheShortlist(t *testing.T) {
 	}
 	if got := itemIDs(online); !reflect.DeepEqual(got, []domain.ItemID{left, right}) {
 		t.Fatalf("fallback cards: %v", got)
+	}
+}
+
+func TestOnlineHidesRenewalAndKeepsUpgrade(t *testing.T) {
+	base := domain.ItemID("base")
+	renew, upgrade := domain.ItemID("renew"), domain.ItemID("upgrade")
+	m := &memory{
+		client:  domain.Client{ID: "u", Group: domain.B2B},
+		cutoff:  time.Date(2026, 8, 31, 0, 0, 0, 0, time.UTC),
+		history: []domain.Sale{{ItemID: base}},
+		sets:    map[contract.CandidateKey][]domain.Candidate{},
+		products: map[domain.ItemID]Product{
+			base:    {Title: "Base"},
+			renew:   {Title: "Renew", Available: true, InSales: true, OfferID: offerID("renew")},
+			upgrade: {Title: "Upgrade", Available: true, InSales: true, OfferID: offerID("upgrade")},
+		},
+	}
+	m.add(contract.CandidateKey{Signal: "renewal", SourceItemID: base}, renew)
+	m.add(contract.CandidateKey{Signal: "upgrade", SourceItemID: base}, upgrade)
+	online, err := New(m).Recommend(context.Background(), contract.RecommendationQuery{ClientID: "u", Mode: contract.Online})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := itemIDs(online); !reflect.DeepEqual(got, []domain.ItemID{upgrade}) || online.Items[0].Kind != domain.Upgrade {
+		t.Fatalf("online cards: %+v", online.Items)
+	}
+	for _, item := range online.Items {
+		if item.Kind == domain.Renewal {
+			t.Fatal(item)
+		}
+	}
+	back, err := New(m).Recommend(context.Background(), contract.RecommendationQuery{ClientID: "u", Mode: contract.Backtest, SnapshotID: "s"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := itemIDs(back); len(got) == 0 || got[0] != renew {
+		t.Fatalf("backtest cards: %v", got)
+	}
+}
+
+func TestOnlineCanReturnMoreThanThree(t *testing.T) {
+	m := &memory{
+		client:   domain.Client{ID: "u", Group: domain.B2C},
+		cutoff:   time.Date(2026, 8, 31, 0, 0, 0, 0, time.UTC),
+		history:  []domain.Sale{{ItemID: "base"}},
+		sets:     map[contract.CandidateKey][]domain.Candidate{},
+		products: map[domain.ItemID]Product{"base": {}},
+	}
+	for _, id := range []domain.ItemID{"c1", "c2", "c3", "c4"} {
+		m.products[id] = Product{Available: true, InSales: true, OfferID: offerID(string(id))}
+		m.add(contract.CandidateKey{Signal: "catalog"}, id)
+		m.add(contract.CandidateKey{Signal: "sales"}, id)
+	}
+	online, err := New(m).Recommend(context.Background(), contract.RecommendationQuery{ClientID: "u", Mode: contract.Online})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(online.Items) != 4 || online.PartialReason != nil {
+		t.Fatalf("online length: %d %v", len(online.Items), online.PartialReason)
+	}
+	back, err := New(m).Recommend(context.Background(), contract.RecommendationQuery{ClientID: "u", Mode: contract.Backtest, SnapshotID: "s"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(back.Items) != 3 || back.PartialReason != nil {
+		t.Fatalf("backtest length: %d %v", len(back.Items), back.PartialReason)
+	}
+}
+
+func TestColdStartUsesOnlyTheClientGroup(t *testing.T) {
+	industry := "Другое"
+	other := "Банки"
+	m := &memory{
+		client:   domain.Client{ID: "u", Group: domain.B2B, Industry: &industry},
+		cutoff:   time.Date(2026, 8, 31, 0, 0, 0, 0, time.UTC),
+		sets:     map[contract.CandidateKey][]domain.Candidate{},
+		products: map[domain.ItemID]Product{},
+	}
+	m.products["group"] = Product{Title: "Group hit", Available: true, OfferID: offerID("group")}
+	m.products["industry"] = Product{Title: "Industry hit", Available: true, OfferID: offerID("industry")}
+	m.add(contract.CandidateKey{Signal: "popularity", ClientGroup: domain.B2B}, "group")
+	m.add(contract.CandidateKey{Signal: "popularity", ClientGroup: domain.B2B, Industry: other}, "industry")
+	online, err := New(m).Recommend(context.Background(), contract.RecommendationQuery{ClientID: "u", Mode: contract.Online})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := itemIDs(online); !reflect.DeepEqual(got, []domain.ItemID{"group"}) || online.PartialReason == nil {
+		t.Fatalf("cold start: %+v", online.Items)
+	}
+	for _, edge := range online.Graph.Edges {
+		if strings.HasPrefix(edge.From, "item:") {
+			t.Fatalf("cold start invented a purchase: %+v", edge)
+		}
+	}
+	m.client.Group = domain.B2C
+	m.products["b2c"] = Product{Title: "B2C hit", Available: true, OfferID: offerID("b2c")}
+	m.add(contract.CandidateKey{Signal: "popularity", ClientGroup: domain.B2C}, "b2c")
+	online, err = New(m).Recommend(context.Background(), contract.RecommendationQuery{ClientID: "u", Mode: contract.Online})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := itemIDs(online); !reflect.DeepEqual(got, []domain.ItemID{"b2c"}) {
+		t.Fatalf("b2c cold start: %v", got)
+	}
+}
+
+type similarReader struct {
+	*memory
+	rows  []domain.Candidate
+	err   error
+	calls int
+}
+
+func (s *similarReader) SimilarItems(context.Context, string, []domain.ItemID, int) ([]domain.Candidate, error) {
+	s.calls++
+	return s.rows, s.err
+}
+
+func TestSimilarItemsStayOnlineAndOptional(t *testing.T) {
+	m := &memory{
+		client:  domain.Client{ID: "u", Group: domain.B2B},
+		cutoff:  time.Date(2026, 8, 31, 0, 0, 0, 0, time.UTC),
+		history: []domain.Sale{{ItemID: "owned"}},
+		sets:    map[contract.CandidateKey][]domain.Candidate{},
+		products: map[domain.ItemID]Product{
+			"owned":   {Title: "Owned"},
+			"popular": {Title: "Popular", Available: true, InSales: true, OfferID: offerID("popular")},
+			"near":    {Title: "Near", Available: true, InSales: true, OfferID: offerID("near")},
+		},
+	}
+	m.add(contract.CandidateKey{Signal: "catalog"}, "popular")
+	m.add(contract.CandidateKey{Signal: "sales"}, "popular")
+	reader := &similarReader{memory: m, rows: []domain.Candidate{{
+		ItemID: "near", Score: 1,
+		Evidence: []domain.Evidence{{ID: "sim", From: "cohort:similar", To: "item:near", Type: "similar", Reason: "Похоже по каталогу", Source: "catalog_embedding", SnapshotID: "s"}},
+	}}}
+	online, err := New(reader).Recommend(context.Background(), contract.RecommendationQuery{ClientID: "u", Mode: contract.Online})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := itemIDs(online); !reflect.DeepEqual(got, []domain.ItemID{"near", "popular"}) || reader.calls == 0 {
+		t.Fatalf("online similar: %v calls=%d", got, reader.calls)
+	}
+	reader.calls = 0
+	back, err := New(reader).Recommend(context.Background(), contract.RecommendationQuery{ClientID: "u", Mode: contract.Backtest, SnapshotID: "s"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := itemIDs(back); !reflect.DeepEqual(got, []domain.ItemID{"popular"}) || reader.calls != 0 {
+		t.Fatalf("backtest similar: %v calls=%d", got, reader.calls)
+	}
+	reader.err = errors.New("index down")
+	online, err = New(reader).Recommend(context.Background(), contract.RecommendationQuery{ClientID: "u", Mode: contract.Online})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := itemIDs(online); !reflect.DeepEqual(got, []domain.ItemID{"popular"}) {
+		t.Fatalf("similar failure: %v", got)
 	}
 }

@@ -1,12 +1,24 @@
 # Модуль рекомендаций
 
+Онлайн-блок больше не показывает карточки вида `renewal`: продление остаётся отдельным сценарием кабинета. Апгрейд и дополнение остаются. Бэктест по-прежнему может поставить продление первым и всегда обрезает выдачу до трёх карточек. Онлайн может вернуть до 36 карточек. Пустая история берёт только популярность своей группы. Пустая отрасль и «Другое» отраслевой ключ не создают. Необязательный источник `SimilarItems` вызывается только онлайн. Ошибка источника оставляет каскад. Хранилище без этого метода просто пропускается.
+
+```go
+type SimilarItems interface {
+    SimilarItems(ctx context.Context, snapshotID string, owned []domain.ItemID, limit int) ([]domain.Candidate, error)
+}
+```
+
+Зелёные проверки этой ветки: `TestOnlineHidesRenewalAndKeepsUpgrade`, `TestOnlineCanReturnMoreThanThree`, `TestColdStartUsesOnlyTheClientGroup`, `TestSimilarItemsStayOnlineAndOptional`, плюс прежние `TestB2BSoloUsesCatalogComplement` и `TestOnlineDropsSameCategoryRival`.
+
+# Модуль рекомендаций
+
 Из корня Go-модуля выполните команду.
 
 ```sh
 go test -count=1 -v ./internal/signals/... ./internal/recommend/...
 ```
 
-В проверке на синтетике прошли `TestTrainCutoff`, `TestRecommendModule` и `TestRefillAfterFilters`. У владельца DEMO-BASE одна карточка продления с вариантами на 12 и 24 месяца и причиной `insufficient_eligible_products`. После покупки артикула на 12 месяцев остаётся вариант на 24. В историческом прогоне оба артикула занимают отдельные места.
+В проверке на синтетике прошли `TestTrainCutoff`, `TestRecommendModule` и `TestRefillAfterFilters`. Онлайн у владельца DEMO-BASE не показывает продление. В историческом прогоне оба артикула продления по-прежнему занимают отдельные места.
 
 ## Сборка снимка
 

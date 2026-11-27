@@ -115,12 +115,18 @@ func (e *Engine) Recommend(ctx context.Context, q contract.RecommendationQuery) 
 	active := pools(client, ids, q.Mode)
 	best := map[domain.ItemID]ranked{}
 	cards := map[domain.ItemID]Product{}
+	owned := slices.Clone(ids)
+	similarSeen := false
 	for limit := 64; ; limit *= 2 {
 		if err := ctx.Err(); err != nil {
 			return zero, err
 		}
 		var more []pool
 		pending := map[domain.ItemID]bool{}
+		if q.Mode == contract.Online && !similarSeen {
+			similarSeen = true
+			collectSimilar(ctx, e.reader, s.ID, owned, bought, best, pending)
+		}
 		for _, p := range active {
 			rows, err := e.reader.Candidates(ctx, s.ID, p.key, limit)
 			if err != nil {
@@ -170,6 +176,9 @@ func (e *Engine) Recommend(ctx context.Context, q contract.RecommendationQuery) 
 			if !eligible(cards[id], client, platforms, q.Mode) {
 				continue
 			}
+			if q.Mode == contract.Online && r.kind == domain.Renewal {
+				continue
+			}
 			if q.Mode == contract.Online && sameCategoryRival(cards[id], products, r.kind) {
 				continue
 			}
@@ -184,8 +193,8 @@ func (e *Engine) Recommend(ctx context.Context, q contract.RecommendationQuery) 
 			return result, nil
 		}
 		// A truncated higher-priority pool may still displace a fallback card.
-		if len(result.Items) == 3 {
-			lastTier := best[result.Items[2].ItemID].tier
+		if len(result.Items) == cardLimit(q.Mode) {
+			lastTier := best[result.Items[len(result.Items)-1].ItemID].tier
 			active = nil
 			for _, p := range more {
 				if p.tier >= lastTier {
