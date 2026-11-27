@@ -1,0 +1,85 @@
+{
+  "documents": [
+    {
+      "source": {
+        "url": "https://example.com/public-pack/vendor-guide",
+        "version": "public-pack-v1",
+        "observed_at": "2026-11-27T10:00:00+05:00"
+      },
+      "text": "Norivault Core can be upgraded to Norivault Plus for scheduled immutable backups.\nNorivault Audit adds exportable audit reports to Norivault Core.",
+      "statements": [
+        {
+          "id": "pack-upgrade",
+          "from": "PACK-BASE",
+          "to": "PACK-PLUS",
+          "kind": "upgrade",
+          "source": {
+            "quote": "Norivault Core can be upgraded to Norivault Plus for scheduled immutable backups."
+          },
+          "constraints": [
+            {
+              "endpoint": "from",
+              "field": "edition",
+              "value": "Core"
+            },
+            {
+              "endpoint": "to",
+              "field": "edition",
+              "value": "Plus"
+            }
+          ]
+        },
+        {
+          "id": "pack-complement",
+          "from": "PACK-BASE",
+          "to": "PACK-AUDIT",
+          "kind": "complement",
+          "source": {
+            "quote": "Norivault Audit adds exportable audit reports to Norivault Core."
+          },
+          "constraints": []
+        }
+      ]
+    },
+    {
+      "source": {
+        "url": "https://example.com/public-pack/bridge-note",
+        "version": "public-pack-v1",
+        "observed_at": "2026-11-27T10:00:00+05:00"
+      },
+      "text": "Norivault Bridge is being evaluated for use with Norivault Core. Compatibility still requires verification."
+    },
+    {
+      "source": {
+        "url": "https://example.com/public-pack/agent-page",
+        "version": "public-pack-v1",
+        "observed_at": "2026-11-27T10:00:00+05:00"
+      },
+      "text": "Norivault Agent includes a command-line installer."
+    },
+    {
+      "source": {
+        "url": "https://example.com/public-pack/category-page",
+        "version": "public-pack-v1",
+        "observed_at": "2026-11-27T10:00:00+05:00"
+      },
+      "text": "Norivault Core is listed in the Backup category.\nVeyro Archive is listed in the Backup category."
+    }
+  ],
+  "rules": [
+    {
+      "id": "pack-upgrade",
+      "from": "PACK-BASE",
+      "to": "PACK-PLUS",
+      "kind": "upgrade",
+      "quote": "Norivault Core can be upgraded to Norivault Plus for scheduled immutable backups."
+    },
+    {
+      "id": "pack-complement",
+      "from": "PACK-BASE",
+      "to": "PACK-AUDIT",
+      "kind": "complement",
+      "quote": "Norivault Audit adds exportable audit reports to Norivault Core."
+    }
+  ]
+}

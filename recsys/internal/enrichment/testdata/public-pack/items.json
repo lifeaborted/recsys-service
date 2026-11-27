@@ -1,0 +1,12 @@
+[
+  {"item_id":"PACK-BASE","sku":"PACK-BASE-01","name":"Norivault Core"},
+  {"item_id":"PACK-PLUS","sku":"PACK-PLUS-01","name":"Norivault Plus"},
+  {"item_id":"PACK-AUDIT","sku":"PACK-AUDIT-01","name":"Norivault Audit"},
+  {"item_id":"PACK-BRIDGE","sku":"PACK-BRIDGE-01","name":"Norivault Bridge"},
+  {"item_id":"PACK-AGENT","sku":"PACK-AGENT-01","name":"Norivault Agent"},
+  {"item_id":"PACK-RENEW","sku":"PACK-RENEW-01","name":"Norivault Core Extension"},
+  {"item_id":"PACK-RIVAL","sku":"PACK-RIVAL-01","name":"Veyro Archive"},
+  {"item_id":"PACK-SYNC","sku":"PACK-SYNC-01","name":"Veyro Sync"},
+  {"item_id":"PACK-DESK","sku":"PACK-DESK-01","name":"Tembril Desk"},
+  {"item_id":"PACK-NOTES","sku":"PACK-NOTES-01","name":"Tembril Notes"}
+]

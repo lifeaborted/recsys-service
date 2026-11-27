@@ -1,0 +1,5 @@
+[
+  {"id":"pack-bridge","from":"PACK-BASE","to":"PACK-BRIDGE","source_url":"https://example.com/public-pack/bridge-note","approved":true},
+  {"id":"pack-weak","from":"PACK-BASE","to":"PACK-AGENT","source_url":"https://example.com/public-pack/agent-page","approved":true},
+  {"id":"pack-rival","from":"PACK-BASE","to":"PACK-RIVAL","source_url":"https://example.com/public-pack/category-page","approved":true}
+]

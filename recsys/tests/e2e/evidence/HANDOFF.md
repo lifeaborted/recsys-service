@@ -1,5 +1,45 @@
 # Передача 03-EVIDENCE
 
+## Публичный пакет доказательств
+
+В `internal/enrichment/testdata/public-pack/` десять вымышленных офферов. Тексты источников находятся в `sources.json`, а адреса `example.com` служат идентификаторами этих локальных документов. Для апгрейда редакции и дополнения в пакете есть проверенные вручную правила с дословными цитатами. Оффер продления присутствует в фиде с атрибутом `license_type` без правила рекомендации.
+
+Из каталога `recsys` запустите в PowerShell:
+
+```powershell
+$env:RECSYS_EVIDENCE_DEMO = '1'
+go test -count=1 -v ./cmd/enrich/ -run '^TestPublicPack(ColdStart)?$'
+Remove-Item Env:RECSYS_EVIDENCE_DEMO
+```
+
+Тест поднимает локальный `httptest` с фиксированными ответами модели и передаёт его адрес дочернему процессу. Дочерний процесс выполняет следующую команду из каталога `recsys/cmd/enrich`:
+
+```powershell
+go run . -feed ../../internal/enrichment/testdata/public-pack/feed.xml `
+  -items ../../internal/enrichment/testdata/public-pack/items.json `
+  -sources ../../internal/enrichment/testdata/public-pack/sources.json `
+  -feed-url https://example.com/public-pack/feed.xml -catalog-version public-pack-v1 `
+  -snapshot public-pack-demo `
+  -relation-requests ../../internal/enrichment/testdata/public-pack/relation-requests.json -card PACK-BASE
+```
+
+`-relation-requests` связывает точные совпадения офферов с локальными источниками из `-sources`. Для каждого запроса `approved: true` разрешает передачу указанного фрагмента провайдеру чата. CLI читает JSON с локального диска и извлекает цитату через провайдера. В результате `relations[].status` равен `confirmed` для вручную проверенных правил, а предложения модели выводятся в `relation_proposals[]` со своим полем `status`. Повторный запуск даёт тот же JSON. При HTTP 503 подтверждённые связи сохраняются, а карточка получает шаблонное объяснение.
+
+Сокращённый вывод выполненного прогона:
+
+```text
+confirmed complement https://example.com/public-pack/vendor-guide "Norivault Audit adds exportable audit reports to Norivault Core."
+confirmed upgrade https://example.com/public-pack/vendor-guide "Norivault Core can be upgraded to Norivault Plus for scheduled immutable backups."
+review pack-bridge complement https://example.com/public-pack/bridge-note "Norivault Bridge is being evaluated for use with Norivault Core." Совместимость требует проверки.
+no_relation pack-rival none https://example.com/public-pack/category-page ""
+rejected pack-weak: relation quote must name both products separately
+--- PASS: TestPublicPack
+Истории покупок пока нет. Этот товар часто выбирают покупатели вашей группы B2B.
+--- PASS: TestPublicPackColdStart
+```
+
+`cold-start.json` задаёт пустую историю и вымышленные агрегаты популярности. Действующий движок ставит Norivault Core первым по популярности в B2B, хотя у Tembril Desk выше общая популярность. Доказательства идут от групп покупателей, ни одно ребро не опирается на прошлую покупку клиента.
+
 ## Локальный запуск
 
 Из каталога `recsys` выполните в PowerShell:

@@ -1,0 +1,10 @@
+{
+  "client": {"client_id": "PACK-NEW", "group": "B2B"},
+  "history": [],
+  "popularity": [
+    {"group": "B2B", "item_id": "PACK-BASE", "buyers": 12},
+    {"group": "B2B", "item_id": "PACK-SYNC", "buyers": 4},
+    {"group": "B2C", "item_id": "PACK-DESK", "buyers": 20},
+    {"group": "", "item_id": "PACK-DESK", "buyers": 20}
+  ]
+}

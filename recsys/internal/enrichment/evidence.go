@@ -49,6 +49,7 @@ type Review struct {
 }
 
 type VerifiedRelation struct {
+	Status      string          `json:"status"`
 	Evidence    domain.Evidence `json:"evidence"`
 	Source      Source          `json:"source"`
 	Constraints []Constraint    `json:"constraints"`
@@ -206,7 +207,7 @@ func (r *Result) verify(review Review, selected map[domain.ItemID]Offer) error {
 		}
 		edge := domain.Evidence{ID: rule.ID, From: "item:" + string(rule.From), To: "item:" + string(rule.To),
 			Type: string(rule.Kind), Weight: 1, Reason: rule.Quote, Source: sourceKey(source), SnapshotID: r.SnapshotID}
-		r.Relations = append(r.Relations, VerifiedRelation{Evidence: edge, Source: source, Constraints: record.statement.Constraints})
+		r.Relations = append(r.Relations, VerifiedRelation{Status: "confirmed", Evidence: edge, Source: source, Constraints: record.statement.Constraints})
 	}
 	return nil
 }

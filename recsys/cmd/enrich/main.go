@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"strings"
 	"time"
 
 	"recsys/internal/domain"
@@ -43,6 +44,7 @@ func run(ctx context.Context, args []string, output, diagnostics io.Writer) erro
 	searchPath := flags.String("semantic-search", "", "optional JSON approving feed names and per-item queries for embeddings")
 	vectorIndex := flags.Bool("vector-index", false, "read catalog vectors already stored in DATABASE_URL")
 	proposalPath := flags.String("propose-relation", "", "extract a relation proposal from one approved source JSON")
+	requestsPath := flags.String("relation-requests", "", "path to relation requests approving local source excerpts for extraction")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -66,6 +68,9 @@ func run(ctx context.Context, args []string, output, diagnostics io.Writer) erro
 	if flags.NArg() != 0 || *path == "" || *itemsPath == "" || *version == "" || *sourceURL == "" || *snapshot == "" {
 		flags.Usage()
 		return fmt.Errorf("feed, items, catalog-version, feed-url and snapshot are required")
+	}
+	if strings.EqualFold(strings.TrimSpace(*snapshot), "v5-train-20260831") {
+		return fmt.Errorf("snapshot v5-train-20260831 is reserved for historical evaluation")
 	}
 	if *publicPath != "" && *card == "" {
 		return fmt.Errorf("public-text requires card")
@@ -154,8 +159,21 @@ func run(ctx context.Context, args []string, output, diagnostics io.Writer) erro
 	}
 	response := struct {
 		enrichment.Result
+		Proposals   []relationDraft   `json:"relation_proposals,omitempty"`
 		Explanation *explain.Rendered `json:"explanation,omitempty"`
 	}{Result: result}
+	if *requestsPath != "" {
+		var requests []relationRequest
+		if err := readJSON(*requestsPath, &requests); err != nil {
+			return err
+		}
+		drafts, rejections, err := extractRelations(ctx, requests, review.Documents, result)
+		if err != nil {
+			return err
+		}
+		response.Proposals = drafts
+		response.Rejected = append(response.Rejected, rejections...)
+	}
 	if *card != "" {
 		var variants []domain.Variant
 		for _, fact := range result.Families {

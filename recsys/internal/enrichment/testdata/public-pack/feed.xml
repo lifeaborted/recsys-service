@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<yml_catalog date="2026-11-27T10:00:00+05:00">
+  <shop><offers>
+    <offer id="801" available="true">
+      <name>Norivault Core</name><vendor>Norivault</vendor><categoryId>backup</categoryId>
+      <vendorCode>PACK-BASE-01</vendorCode><url>https://example.com/public-pack/feed.xml#offer-801</url>
+      <param name="family">norivault</param><param name="license type">base</param>
+      <param name="edition">Core</param>
+      <param name="term" unit="month">12</param>
+    </offer>
+    <offer id="802" available="true">
+      <name>Norivault Plus</name><vendor>Norivault</vendor><categoryId>backup</categoryId>
+      <vendorCode>PACK-PLUS-01</vendorCode><url>https://example.com/public-pack/feed.xml#offer-802</url>
+      <param name="family">norivault</param><param name="license type">base</param>
+      <param name="edition">Plus</param>
+      <param name="term" unit="month">12</param>
+    </offer>
+    <offer id="803" available="true">
+      <name>Norivault Audit</name><vendor>Norivault</vendor><categoryId>backup</categoryId>
+      <vendorCode>PACK-AUDIT-01</vendorCode><url>https://example.com/public-pack/feed.xml#offer-803</url>
+      <param name="family">norivault-audit</param><param name="license type">addon</param>
+    </offer>
+    <offer id="804" available="true">
+      <name>Norivault Bridge</name><vendor>Norivault</vendor><categoryId>backup</categoryId>
+      <vendorCode>PACK-BRIDGE-01</vendorCode><url>https://example.com/public-pack/feed.xml#offer-804</url>
+      <param name="family">norivault-bridge</param><param name="license type">addon</param>
+    </offer>
+    <offer id="805" available="true">
+      <name>Norivault Agent</name><vendor>Norivault</vendor><categoryId>backup</categoryId>
+      <vendorCode>PACK-AGENT-01</vendorCode><url>https://example.com/public-pack/feed.xml#offer-805</url>
+      <param name="family">norivault-agent</param><param name="license type">addon</param>
+    </offer>
+    <offer id="806" available="true">
+      <name>Norivault Core Extension</name><vendor>Norivault</vendor><categoryId>backup</categoryId>
+      <vendorCode>PACK-RENEW-01</vendorCode><url>https://example.com/public-pack/feed.xml#offer-806</url>
+      <param name="family">norivault</param><param name="license type">renewal</param>
+      <param name="term" unit="month">12</param>
+    </offer>
+    <offer id="807" available="true">
+      <name>Veyro Archive</name><vendor>Veyro</vendor><categoryId>backup</categoryId>
+      <vendorCode>PACK-RIVAL-01</vendorCode><url>https://example.com/public-pack/feed.xml#offer-807</url>
+      <param name="family">veyro-archive</param><param name="license type">base</param>
+    </offer>
+    <offer id="808" available="true">
+      <name>Veyro Sync</name><vendor>Veyro</vendor><categoryId>sync</categoryId>
+      <vendorCode>PACK-SYNC-01</vendorCode><url>https://example.com/public-pack/feed.xml#offer-808</url>
+      <param name="family">veyro-sync</param><param name="license type">base</param>
+    </offer>
+    <offer id="809" available="true">
+      <name>Tembril Desk</name><vendor>Tembril</vendor><categoryId>support</categoryId>
+      <vendorCode>PACK-DESK-01</vendorCode><url>https://example.com/public-pack/feed.xml#offer-809</url>
+      <param name="family">tembril-desk</param><param name="license type">base</param>
+    </offer>
+    <offer id="810" available="true">
+      <name>Tembril Notes</name><vendor>Tembril</vendor><categoryId>notes</categoryId>
+      <vendorCode>PACK-NOTES-01</vendorCode><url>https://example.com/public-pack/feed.xml#offer-810</url>
+      <param name="family">tembril-notes</param><param name="license type">base</param>
+    </offer>
+  </offers></shop>
+</yml_catalog>
