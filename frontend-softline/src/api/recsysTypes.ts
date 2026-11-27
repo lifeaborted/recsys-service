@@ -76,6 +76,7 @@ export interface SessionResponse {
 }
 
 export interface MeResponse {
+  role: "unverified" | "verified" | "admin";
   profile_id: string;
   client_id: string;
   client_group: "B2B" | "B2C";

@@ -1,0 +1,28 @@
+.portal-account-mobile { display: none; }
+.portal-overview .heading-xl, .portal-overview-extra .heading-xl { margin: 0; }
+.portal-overview .portal-shelf { grid-auto-columns: 208px; padding-inline: 0; }
+.portal-overview .portal-suggestion { min-height: 290px; }
+.portal-overview-extra { margin-top: 32px; }
+.portal-purchase { margin: 0; color: #545f70; }
+.portal-purchase summary { cursor: pointer; }
+.portal-purchase .clone-toolbar { margin-top: 12px; }
+.portal-purchase label { display: grid; gap: 4px; }
+.portal-purchase select { max-width: min(440px, 85vw); }
+
+.portal-diagnostics .preview-controls { display: flex; flex-wrap: wrap; align-items: end; gap: 14px; margin: 16px 0; }
+.portal-diagnostics .preview-controls label { display: grid; gap: 6px; }
+.portal-diagnostics .preview-controls select { height: 36px; padding-inline: 8px; border: 1px solid #d9dce1; border-radius: 8px; background: #fff; }
+.portal-diagnostics .preview-meta { color: #545f70; overflow-wrap: anywhere; }
+.portal-diagnostics .preview-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(265px, 100%), 1fr)); gap: 16px; margin: 20px 0; }
+.portal-diagnostics .preview-grid .demo-card { width: auto; min-width: 0; }
+.portal-diagnostics details { margin-block: 12px; padding: 12px; border: 1px solid #d9dce1; border-radius: 8px; }
+.portal-diagnostics summary { cursor: pointer; }
+.portal-diagnostics pre { overflow: auto; max-height: 450px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.preview-stats { display: flex; flex-wrap: wrap; gap: 18px; }
+.preview-stats dd { margin: 0; font-weight: 700; }
+
+@media (max-width: 767px) {
+  .portal-account-mobile { display: flex; flex-wrap: wrap; gap: 8px 16px; margin: 8px 16px 0; }
+  .portal-account-mobile a { color: #545f70; }
+  .portal-overview .portal-shelf { grid-auto-columns: 172px; }
+}

@@ -102,6 +102,7 @@ func (s *Store) SeedDemo(ctx context.Context, opts SeedOptions) error {
 
 		INSERT INTO recommendations.clients (excel_row, client_id, client_group, client_type, industry, segment, lk_access)
 		VALUES
+			(900003, 'DEMO-GUEST', 'B2C', 'ФЛ', NULL, NULL, 'да'),
 			(900001, 'DEMO-BUYER', 'B2B', 'ЮЛ', 'Образование', 'enterprise', 'да'),
 			(900002, 'DEMO-NEW',   'B2C', 'ФЛ', NULL,          NULL,         'да')
 		ON CONFLICT (client_id) DO UPDATE SET
@@ -138,8 +139,8 @@ func (s *Store) SeedDemo(ctx context.Context, opts SeedOptions) error {
 			useHash = existingHash
 		}
 		if _, err := tx.Exec(ctx, `
-			INSERT INTO recommendations.stand_accounts (login, password_hash, profile_id, client_id)
-			VALUES ($1, $2, $3, $4)
+			INSERT INTO recommendations.stand_accounts (login, password_hash, profile_id, client_id, role)
+			VALUES ($1, $2, $3, $4, 'verified')
 			ON CONFLICT (login) DO UPDATE SET
 				password_hash = EXCLUDED.password_hash,
 				profile_id    = EXCLUDED.profile_id,

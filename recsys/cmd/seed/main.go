@@ -15,15 +15,16 @@ func main() {
 	migrateFirst := flag.Bool("migrate", false, "apply migrations before seeding demo fixtures")
 	migrationsDir := flag.String("migrations-dir", "", "override migrations directory")
 	allowOnV4 := flag.Bool("allow-on-v4", false, "allow seeding onto a database containing dataset v4")
+	previewAccounts := flag.Bool("preview-accounts", false, "configure guest and four accounts in a synthetic preview database")
 	flag.Parse()
 
-	if err := run(*migrateFirst, *migrationsDir, *allowOnV4); err != nil {
+	if err := run(*migrateFirst, *migrationsDir, *allowOnV4, *previewAccounts); err != nil {
 		fmt.Fprintln(os.Stderr, "seed:", err)
 		os.Exit(1)
 	}
 }
 
-func run(migrateFirst bool, migrationsDirOverride string, allowOnV4 bool) error {
+func run(migrateFirst bool, migrationsDirOverride string, allowOnV4, previewAccounts bool) error {
 	cfg := config.Load()
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
@@ -44,6 +45,10 @@ func run(migrateFirst bool, migrationsDirOverride string, allowOnV4 bool) error 
 			return fmt.Errorf("migrate: %w", err)
 		}
 		fmt.Fprintf(os.Stdout, "migrations ready (version=%s)\n", ver)
+	}
+
+	if previewAccounts {
+		return store.ConfigurePreviewAccounts(ctx, os.Getenv("PREVIEW_ACCOUNT_PASSWORD"), os.Getenv("PREVIEW_ADMIN_PASSWORD"), cfg.BcryptCost)
 	}
 
 	if err := store.SeedDemo(ctx, postgres.SeedOptions{

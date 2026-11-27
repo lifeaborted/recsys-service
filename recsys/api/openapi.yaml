@@ -141,9 +141,10 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [profile_id, client_group]
+                required: [profile_id, client_group, role]
                 properties:
                   profile_id: {type: string}
+                  role: {type: string, enum: [unverified, verified, admin]}
                   client_id: {type: string}
                   client_group: {$ref: '#/components/schemas/ClientGroup'}
                   industry: {type: string}
@@ -369,6 +370,54 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /recommendations/guest:
+    get:
+      operationId: getGuestRecommendations
+      security: []
+      parameters:
+        - in: query
+          name: limit
+          schema: {type: integer, minimum: 1, maximum: 36}
+      responses:
+        '200':
+          description: Cold start recommendations for an anonymous visitor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Recommendations'
+  /admin/recommendations:
+    get:
+      operationId: getPreviewRecommendationDiagnostics
+      parameters:
+        - in: query
+          name: target
+          schema: {type: string, enum: [guest, notver, verb2b, verb2c, admin], default: guest}
+        - in: query
+          name: limit
+          schema: {type: integer, minimum: 1, maximum: 36}
+      responses:
+        '200':
+          description: Preview recommendations, table counts, and recorded runs
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [target, duration_ms, recommendations, tables, runs]
+                properties:
+                  target: {type: string}
+                  duration_ms: {type: integer, format: int64}
+                  recommendations: {$ref: '#/components/schemas/Recommendations'}
+                  tables:
+                    type: object
+                    nullable: true
+                    additionalProperties: {type: integer, format: int64}
+                  runs:
+                    type: array
+                    items: {$ref: '#/components/schemas/Run'}
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: Administrator role is required
   /recommendations/me:
     get:
       operationId: getCurrentRecommendations

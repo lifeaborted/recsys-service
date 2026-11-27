@@ -78,6 +78,7 @@ func (s *Store) CreateAccountWithProfile(ctx context.Context, p auth.CreateAccou
 			Group:    p.ClientGroup,
 			Industry: p.Industry,
 			Login:    p.Login,
+			Role:     "unverified",
 		},
 		CreatedAt: p.CreatedAt,
 	}, nil
@@ -89,13 +90,13 @@ func (s *Store) AccountByLogin(ctx context.Context, login string) (auth.AccountR
 	var clientID, group string
 	err := s.pool.QueryRow(ctx, `
 		SELECT a.account_id, a.login, a.password_hash, a.profile_id, a.client_id,
-		       COALESCE(c.client_group, 'B2B'), c.industry, a.created_at
+		       COALESCE(c.client_group, 'B2B'), c.industry, a.created_at, a.role
 		FROM recommendations.stand_accounts a
 		JOIN recommendations.clients c ON c.client_id = a.client_id
 		WHERE a.login = $1
 	`, strings.ToLower(strings.TrimSpace(login))).Scan(
 		&rec.AccountID, &rec.Login, &rec.PasswordHash,
-		&rec.Profile.ID, &clientID, &group, &rec.Profile.Industry, &rec.CreatedAt,
+		&rec.Profile.ID, &clientID, &group, &rec.Profile.Industry, &rec.CreatedAt, &rec.Profile.Role,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return auth.AccountRecord{}, auth.ErrInvalidCredentials
@@ -125,7 +126,7 @@ func (s *Store) SessionByTokenHash(ctx context.Context, tokenHash []byte) (auth.
 	err := s.pool.QueryRow(ctx, `
 		SELECT s.account_id, s.created_at, s.expires_at,
 		       a.profile_id, a.client_id, a.login,
-		       COALESCE(c.client_group, 'B2B'), c.industry
+		       COALESCE(c.client_group, 'B2B'), c.industry, a.role
 		FROM recommendations.stand_sessions s
 		JOIN recommendations.stand_accounts a ON a.account_id = s.account_id
 		JOIN recommendations.clients c ON c.client_id = a.client_id
@@ -133,7 +134,7 @@ func (s *Store) SessionByTokenHash(ctx context.Context, tokenHash []byte) (auth.
 	`, tokenHash).Scan(
 		&rec.AccountID, &rec.CreatedAt, &rec.ExpiresAt,
 		&rec.Profile.ID, &clientID, &rec.Profile.Login,
-		&group, &rec.Profile.Industry,
+		&group, &rec.Profile.Industry, &rec.Profile.Role,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return auth.SessionRecord{}, auth.ErrUnauthorized

@@ -10,6 +10,8 @@ import { readFileSync, writeFileSync } from "node:fs";
 
 const source = "E:\\Главная.html";
 const html = readFileSync(source, "utf8");
+const accountName = html.match(/<div\b[^>]*class="sidebar__username"[^>]*>\s*<span\b[^>]*>([^<]+)<\/span>/)?.[1].trim();
+const accountEmail = html.match(/<span\b[^>]*class="sidebar__email"[^>]*>([^<]+)<\/span>/)?.[1].trim();
 
 function balancedDivEnd(text, start) {
   let depth = 0;
@@ -59,7 +61,9 @@ function localize(value) {
     .replace(/\.\/Главная_files\/logo_resize_logo40x200_([a-f0-9]+)(?!\.png)/g,
       "/assets/logo_resize_logo40x200_$1.png")
     .replace(/\.\/Главная_files\//g, "/assets/");
-  return value;
+  if (accountName) value = value.replaceAll(accountName, "DEMO_LOGIN_LABEL");
+  if (accountEmail) value = value.replaceAll(accountEmail, "DEMO_STATUS_LABEL");
+  return value.replace(/(<div[^>]*class="sidebar__avatar"[^>]*>)[^<]+/, "$1DEMO_INITIALS");
 }
 
 const header = localize(slice(html, '<header class="b-store-header">', "</header>"));
@@ -69,7 +73,7 @@ const navAt = html.indexOf('<nav class="sidebar">', layoutAt);
 const navEnd = html.indexOf("</nav>", navAt) + "</nav>".length;
 let sidebar = localize(html.slice(navAt, navEnd));
 
-// Добавляем прямую ссылку на страницу тестирования рекомендаций.
+// Добавляем ссылку на диагностику. Оболочка показывает её только администратору.
 const recoLink =
   '<li class="nav-list__item"><a href="#/recommendations" class="nav-list__link">' +
   '<svg class="icon icon-size-16 sl-color-icon nav-list__icon" aria-hidden="true" viewBox="0 0 16 16">' +

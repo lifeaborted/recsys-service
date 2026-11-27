@@ -10,7 +10,7 @@ import type { ProductDetail, ScoreHistory } from "../api/types";
 import { DemoScoreModal } from "../components/DemoScoreModal";
 import { formatPrice } from "../lib/format";
 import { getRouteParam } from "../lib/routes";
-import { useSession } from "../state/session";
+import { RECSYS_API, useSession } from "../state/session";
 import { useSettings } from "../state/settings";
 
 function textValue(value: unknown): string {
@@ -40,8 +40,8 @@ export function DemoProductPage() {
   const [scoreError, setScoreError] = useState<string | null>(null);
   const [scoreLoading, setScoreLoading] = useState(false);
 
-  const token = settings.token || session.profile?.token || "";
-  const baseUrl = settings.baseUrl || "/api";
+  const token = session.profile?.token ?? "";
+  const baseUrl = RECSYS_API;
 
   const openScore = (target: string) => {
     setScoreHistory(null);
@@ -70,8 +70,8 @@ export function DemoProductPage() {
   useEffect(() => {
     if (itemID) return;
     if (!token) {
-      setListError(session.transport === "mock" ? "Нет активной сессии. Войдите на демо-экран." : null);
-      setListLoading(session.transport !== "mock");
+      setListError("Войдите на главной странице, чтобы открыть товар.");
+      setListLoading(false);
       return;
     }
     const controller = new AbortController();

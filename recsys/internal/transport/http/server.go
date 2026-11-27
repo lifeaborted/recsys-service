@@ -161,11 +161,13 @@ func NewServer(cfg Config) *Server {
 	mux.HandleFunc("GET /api/v1/products", s.requireSession(s.rejectProfileOverride(s.handleGetProducts)))
 	mux.HandleFunc("GET /api/v1/products/{itemID}", s.requireSession(s.rejectProfileOverride(s.handleGetProductDetail)))
 	mux.HandleFunc("GET /api/v1/products/{itemID}/score-history", s.requireSession(s.rejectProfileOverride(s.handleGetScoreHistory)))
-	mux.HandleFunc("GET /api/v1/stats", s.requireSession(s.rejectProfileOverride(s.handleGetStats)))
+	mux.HandleFunc("GET /api/v1/stats", s.requireSession(s.requireAdmin(s.rejectProfileOverride(s.handleGetStats))))
 	mux.HandleFunc("POST /api/v1/runs", s.requireSession(s.rejectProfileOverride(s.handlePostRuns)))
 	mux.HandleFunc("GET /api/v1/runs", s.requireSession(s.rejectProfileOverride(s.handleGetRuns)))
 	mux.HandleFunc("POST /api/v1/events", s.requireSession(s.rejectProfileOverride(s.handlePostEvents)))
 	mux.HandleFunc("POST /api/v1/purchases", s.requireSession(s.rejectProfileOverride(s.handlePostPurchases)))
+	mux.HandleFunc("GET /api/v1/recommendations/guest", s.rejectProfileOverride(s.handleGetGuestRecommendations))
+	mux.HandleFunc("GET /api/v1/admin/recommendations", s.requireSession(s.requireAdmin(s.rejectProfileOverride(s.handleGetAdminRecommendations))))
 	mux.HandleFunc("GET /api/v1/recommendations/me", s.requireSession(s.rejectProfileOverride(s.handleGetRecommendationsMe)))
 
 	// Swagger UI & OpenAPI specification served from the same OpenAPI document.

@@ -1,16 +1,11 @@
-// Браузерный тест демо-экрана (05-DEMO, п. «Проверка и передача»).
-// Требует запущенный Vite: npm run dev. HTTP подменён синтетикой — Go API не нужен.
-// Адрес экрана: FRONTEND_URL (по умолчанию http://localhost:5173).
-// Браузер: CHROME_PATH или любой chrome/chromium/msedge в PATH.
-//   npm run test:e2e:demo
 import test from "node:test";
 import assert from "node:assert/strict";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { chromium } from "playwright-core";
 
 const ORIGIN = (process.env.FRONTEND_URL ?? "http://localhost:5173").replace(/\/$/, "");
-const SCREEN = `${ORIGIN}/#/demo`;
+const SCREEN = `${ORIGIN}/`;
 
 function findBrowser() {
   if (process.env.CHROME_PATH) return process.env.CHROME_PATH;
@@ -67,6 +62,7 @@ function findBrowser() {
 }
 
 async function serverUp() {
+  if (process.env.PREVIEW_BROWSER_RESOLVE) return true;
   try {
     const response = await fetch(ORIGIN, { signal: AbortSignal.timeout(2000) });
     return response.ok;
@@ -75,206 +71,113 @@ async function serverUp() {
   }
 }
 
-const up = await serverUp();
 const executablePath = findBrowser();
-let apiUp = false;
-try {
-  const response = await fetch((process.env.RECSYS_E2E_API ?? "http://localhost:8080") + "/api/v1/health", { signal: AbortSignal.timeout(2000) });
-  apiUp = response.ok;
-} catch {
-  apiUp = false;
-}
+const live = Boolean(process.env.PREVIEW_ACCOUNT_PASSWORD && process.env.PREVIEW_ADMIN_PASSWORD);
+const fixture = JSON.parse(readFileSync(new URL("../../../../recsys/api/examples/recommendations.full.json", import.meta.url), "utf8"));
+const profiles = {
+  notver: { role: "unverified", client_group: "B2C", label: "Неверифицированный аккаунт" },
+  verb2b: { role: "verified", client_group: "B2B", label: "Верифицированный B2B" },
+  verb2c: { role: "verified", client_group: "B2C", label: "Верифицированный B2C" },
+  admin: { role: "admin", client_group: "B2C", label: "Администратор" },
+};
 
-test("демо-экран: карточки, варианты, ошибка и смена профиля", { skip: !up || !executablePath ? "нужны Vite и браузер в PATH (или CHROME_PATH)" : false }, async (t) => {
-  const browser = await chromium.launch({ executablePath, headless: true, args: ["--no-sandbox"] });
+test("главная для гостя, три статуса и закрытая диагностика", {
+  skip: !await serverUp() || !executablePath ? "Нужны доступный стенд и установленный Chromium" : false,
+}, async (t) => {
+  const args = ["--no-sandbox"];
+  if (process.env.PREVIEW_BROWSER_RESOLVE) {
+    args.push("--no-proxy-server", `--host-resolver-rules=${process.env.PREVIEW_BROWSER_RESOLVE}`);
+  }
+  const browser = await chromium.launch({ executablePath, headless: true, args });
   t.after(() => browser.close());
-
   const page = await browser.newPage();
-  const consoleErrors = [];
-  page.on("console", (message) => {
-    // 404 (favicon) и 401 в момент переключения транспорта — ожидаемые переходы.
-    if (message.type() === "error" && !message.text().includes("404") && !message.text().includes("401")) {
-      consoleErrors.push(message.text());
-    }
-  });
+
+  if (!live) {
+    await page.route("**/api/v1/**", async (route) => {
+      const request = route.request();
+      const url = new URL(request.url());
+      const path = url.pathname.slice("/api/v1".length);
+      const profile = request.headers().authorization?.slice(7);
+      if (path === "/auth/login") {
+        const { login, password } = request.postDataJSON();
+        if (!Object.hasOwn(profiles, login) || password !== "fixture") {
+          return route.fulfill({ status: 401, json: { error: { message: "Invalid credentials" } } });
+        }
+        return route.fulfill({ json: { access_token: login } });
+      }
+      if (path === "/users/me" && Object.hasOwn(profiles, profile)) {
+        return route.fulfill({ json: { ...profiles[profile], profile_id: profile, client_id: profile, login: profile } });
+      }
+      if (path === "/recommendations/guest" || path === "/recommendations/me") {
+        return route.fulfill({ json: fixture });
+      }
+      if (path === "/products") {
+        return route.fulfill({ json: { items: [{ item_id: "DEMO-BASE", title: "Базовая лицензия", available: true }] } });
+      }
+      if (path === "/admin/recommendations" && profile === "admin") {
+        return route.fulfill({ json: {
+          target: url.searchParams.get("target"), recommendations: fixture, duration_ms: 12,
+          tables: { catalog_offer_embeddings: 8 }, runs: [],
+        } });
+      }
+      return route.fulfill({ status: 403, json: { error: { message: "Administrator access required" } } });
+    });
+  }
+
+  const guest = page.waitForResponse((r) => r.url().includes("/recommendations/guest") && r.ok());
   await page.goto(SCREEN);
-  // Тест экрана работает на подмене транспорта: включаем mock явно.
-  await page.evaluate(() => {
-    localStorage.clear();
-    localStorage.setItem("lk-demo.session.v2", JSON.stringify({
-      transport: "mock", scenario: "auto", profile: { id: "u1" },
-    }));
-  });
-  await page.reload();
-  await page.getByText("Открыть карточку").first().waitFor();
+  await guest;
+  await page.getByRole("heading", { name: "Популярные товары" }).waitFor();
+  await page.locator(".store-front .portal-suggestion").first().waitFor();
+  assert.equal(await page.getByRole("link", { name: "Отладка рекомендаций" }).count(), 0);
+  assert.equal(await page.getByRole("button", { name: "Купить товар" }).count(), 0);
+  await page.waitForFunction(() => [...document.images].filter((image) => image.closest(".store-promos")).every((image) => image.complete && image.naturalWidth > 0));
 
-  const profile = page.locator("select").nth(0);
-  const scenario = page.locator("select").nth(2);
+  async function enter(name) {
+    await page.locator(".store-actions").getByRole("button", { name: "Войти", exact: true }).click();
+    const modal = page.getByRole("dialog", { name: "Вход на демостенд" });
+    await modal.getByLabel("Логин", { exact: true }).fill(name);
+    await modal.getByLabel("Пароль", { exact: true }).fill(live
+      ? (name === "admin" ? process.env.PREVIEW_ADMIN_PASSWORD : process.env.PREVIEW_ACCOUNT_PASSWORD)
+      : "fixture");
+    const signedIn = page.waitForResponse((r) => r.url().includes("/recommendations/me") && r.ok());
+    await modal.getByRole("button", { name: "Войти", exact: true }).click();
+    await signedIn;
+    await page.locator(".sidebar__username").getByText(name, { exact: true }).waitFor();
+    await page.locator(".sidebar__email").getByText(profiles[name].label, { exact: true }).waitFor();
+    await page.getByRole("heading", { name: "Вам может подойти" }).waitFor();
+  }
 
-  await t.test("полная выдача: три карточки и варианты модуля", async () => {
-    await profile.selectOption("u1");
-    await scenario.selectOption("full");
-    await page.waitForFunction(() => document.querySelectorAll(".demo-card").length === 3);
-    const titles = await page.locator(".demo-card__title").allTextContents();
-    assert.equal(titles.length, 3);
-    assert.ok(titles.includes("Модуль отчётности на 12 месяцев"));
-
-    await page.getByRole("button", { name: "Сравнить варианты" }).first().click();
-    const variants = await page.locator(".demo-variant").allTextContents();
-    assert.ok(variants.some((text) => text.includes("12 мес.")));
-    assert.ok(variants.some((text) => text.includes("24 мес.")));
-    assert.ok(variants.some((text) => text.includes("Срок окончания неизвестен")));
-    assert.ok(variants.some((text) => /synthetic-(offer|unknown)-/.test(text)), "источник отличия должен быть показан");
-
-    const hrefs = await page.locator(".demo-card a.demo-card__link").evaluateAll(
-      (links) => links.map((link) => link.getAttribute("href")),
-    );
-    assert.ok(hrefs.length >= 3, "у каждой карточки должна быть доступная ссылка");
-    assert.ok(hrefs.every((href) => href && href.startsWith("http")));
-  });
-
-  await t.test("объяснение раскрывает только связанное ребро", async () => {
-    await page.getByRole("button", { name: "Почему рекомендуем" }).first().click();
-    const reason = await page.locator(".demo-card__source").first().textContent();
-    assert.match(reason, /item:DEMO-BASE → item:DEMO-MODULE-12/);
-    assert.match(reason, /synthetic-rule-1/);
-  });
-
-  await t.test("главная кнопка открывает граф в модальном окне", async () => {
-    await page.getByRole("button", { name: "Показать граф" }).first().click();
-    const modal = page.locator(".demo-modal");
-    const dialog = page.getByRole("dialog");
-    await dialog.waitFor();
-    assert.ok(await dialog.isVisible());
-
-    const graph = dialog.locator(".demo-graph");
-    const edges = await graph.locator(".demo-graph__edges").textContent();
-    assert.match(edges, /item:DEMO-BASE → item:DEMO-MODULE-12/);
-    assert.doesNotMatch(edges, /DEMO-UPGRADE|DEMO-COMPLEMENT/, "в граф попали чужие рёбра");
-    assert.ok(await graph.locator("svg").isVisible());
-
-    await dialog.getByRole("button", { name: "Закрыть граф" }).click();
-    await modal.waitFor({ state: "hidden" });
-  });
-
-  await t.test("профиль без истории: две карточки и разные бейджи проверки", async () => {
-    await scenario.selectOption("auto");
-    await profile.selectOption("u3");
-    await page.getByText("требует проверки").first().waitFor();
-    assert.equal(await page.locator(".demo-card").count(), 2);
-    const badges = await page.locator(".demo-card__verification").allTextContents();
-    assert.ok(badges.includes("подтверждено"));
-    assert.ok(badges.includes("требует проверки"));
-    const cards = await page.locator(".demo-cards").textContent();
-    assert.doesNotMatch(cards, /прошл|куплен|продлен/i);
-    assert.equal(await page.getByText("Продление", { exact: false }).count(), 0);
-  });
-
-  await t.test("таблица A/B, варианты и оговорка про текущий фид", async () => {
-    const table = page.locator(".demo-quality__table");
-    await table.waitFor();
-    const headers = await table.locator("thead th").allTextContents();
-    for (const header of ["все", "B2B", "B2C"]) {
-      assert.ok(headers.includes(header), `в таблице нет колонки ${header}`);
-    }
-    const tableText = await table.textContent();
-    assert.match(tableText, /11,97%/);
-    assert.match(tableText, /14,53%/);
-    assert.doesNotMatch(tableText, /55%/, "55% визитов не должно попадать в таблицу Precision@3");
-
-    const quality = await page.locator(".demo-quality").textContent();
-    assert.match(quality, /42 из 121 \(34,71%\)/);
-    assert.match(quality, /27 из 75 \(36%\)/);
-    assert.match(quality, /Около 55% визитов/);
-    assert.match(quality, /не Precision@3/);
-    assert.match(quality, /Дата фида: 2026-11-27/);
-    assert.match(quality, /Исторического снимка каталога нет/);
-    assert.match(quality, /продаж до 31\.08\.2026/);
-
-    const chart = page.locator(".demo-chart");
-    await chart.waitFor();
-    assert.match(await chart.textContent(), /Precision@3: A против B/);
-    assert.equal(await chart.locator(".demo-chart__bar").count(), 18);
-    assert.match(await chart.locator(".demo-chart__note").textContent(), /в график не входят/);
-  });
-
-  await t.test("частичная и пустая выдача", async () => {
-    await scenario.selectOption("partial");
-    await page.getByText("insufficient_eligible_products").waitFor();
-    assert.equal(await page.locator(".demo-card").count(), 1);
-
-    await scenario.selectOption("empty");
-    await page.getByText("Нет рекомендаций для этого профиля.").waitFor();
-    assert.equal(await page.locator(".demo-card").count(), 0);
-  });
-
-  await t.test("ошибка показывает request_id и убирает карточки", async () => {
-    await scenario.selectOption("error");
-    await page.getByText("model_unavailable").waitFor();
-    const banner = await page.locator(".demo-banner_error").textContent();
-    assert.match(banner, /demo-error-1/);
-    assert.equal(await page.locator(".demo-card").count(), 0);
-  });
-
-  await t.test("медленный ответ старой сессии игнорируется", async () => {
-    await scenario.selectOption("slow");
-    await profile.selectOption("u2");
-    await scenario.selectOption("auto");
-    await page.getByText("insufficient_eligible_products").waitFor();
-    await page.waitForTimeout(1900);
-    const status = await page.locator(".demo-status").first().textContent();
-    assert.match(status, /u2/);
-    assert.match(status, /demo-1/);
-    assert.doesNotMatch(status, /demo-full-1/);
-  });
-
-  await t.test("HTTP-транспорт через собственный Go API", { skip: !apiUp ? "Go API не запущен" : false }, async () => {
-    const transport = page.locator("select").nth(1);
-    await profile.selectOption("u1");
-    await scenario.selectOption("auto");
-    await transport.selectOption("http");
-    await page.waitForFunction(() => document.querySelectorAll(".demo-card").length > 0);
-    const cards = await page.locator(".demo-card").count();
-    assert.ok(cards > 0 && cards <= 36);
-    const status = await page.locator(".demo-status").first().textContent();
-    assert.match(status, /request_id/);
-    if (process.env.RECSYS_E2E_LIVE === "1") {
-      await page.getByLabel("Каталог").selectOption("DEMO-BASE");
-      await page.getByRole("button", { name: "Купить из каталога" }).click();
-      await page.getByText("Покупка записана для DEMO-BASE").waitFor();
-      await page.getByText("Дата фида:").filter({ hasText: "2026-08-31" }).waitFor();
-      const upgrade = page.locator(".demo-card").filter({ has: page.getByText("апгрейд", { exact: true }) }).first();
-      await upgrade.getByRole("button", { name: "Почему рекомендуем" }).click();
-      assert.match(await upgrade.locator(".demo-card__source").first().textContent(), /item:DEMO-BASE → item:DEMO-UPGRADE/);
-      assert.equal(await page.locator(".demo-card").getByText("продление", { exact: true }).count(), 0);
-      await upgrade.getByRole("button", { name: "Купить товар", exact: true }).click();
-      await page.getByText("Покупка записана для DEMO-UPGRADE").waitFor();
-      await page.getByRole("heading", { name: "Дополнительный модуль", exact: true }).waitFor();
-      await upgrade.waitFor({ state: "hidden" });
-    }
-    await transport.selectOption("mock");
-  });
-
-  await t.test("старые экраны открываются в live-режиме", async () => {
-    await page.goto(`${ORIGIN}/#/`);
-    await page.getByText("Вам может подойти").waitFor();
-    assert.ok(await page.locator(".home-page .heading-xl").count() > 0);
-
+  for (const name of ["notver", "verb2b", "verb2c"]) {
+    await enter(name);
+    await page.locator(".portal-overview .portal-suggestion").first().waitFor();
+    assert.equal(await page.getByRole("link", { name: "Отладка рекомендаций" }).count(), 0);
     await page.goto(`${ORIGIN}/#/recommendations`);
-    await page.getByText("Тест рекомендаций").first().waitFor();
-    const stats = await page.locator(".stat-card__value").allTextContents();
-    assert.ok(stats.includes("LIVE"));
-  });
+    await page.getByText("Для просмотра диагностики нужен аккаунт администратора.").waitFor();
+    await page.locator(".b-store-header__middle-link.is-active").click();
+    await page.getByRole("button", { name: "Выйти", exact: true }).click();
+    await page.getByRole("heading", { name: "Популярные товары" }).waitFor();
+  }
 
-  await t.test("карточки видны на узком экране", async () => {
-    await page.setViewportSize({ width: 390, height: 844 });
-    await page.goto(SCREEN);
-    await page.getByText("Открыть карточку").first().waitFor();
-    const boxes = await page.locator(".demo-card").first().boundingBox();
-    assert.ok(boxes && boxes.width > 0 && boxes.width <= 390);
-  });
+  await enter("admin");
+  await page.locator(".sidebar").getByRole("link", { name: "Отладка рекомендаций" }).click();
+  await page.getByRole("heading", { name: "Отладка рекомендаций" }).waitFor();
+  await page.getByText("catalog_offer_embeddings", { exact: true }).waitFor();
+  const comparison = page.waitForResponse((r) => r.url().includes("/admin/recommendations?target=verb2b") && r.ok());
+  await page.getByLabel("Профиль для проверки").selectOption("verb2b");
+  await comparison;
+  await page.getByText("Ответ ранжирования, оценки и граф", { exact: true }).waitFor();
+  await page.getByRole("button", { name: "Показать граф" }).first().click();
+  await page.getByRole("dialog").waitFor();
+  await page.keyboard.press("Escape");
 
-  await t.test("консоль без ошибок приложения", async () => {
-    assert.deepEqual(consoleErrors, []);
-  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  const mobile = page.locator(".portal-account-mobile");
+  await mobile.getByRole("link", { name: "Отладка рекомендаций" }).waitFor();
+  await mobile.getByRole("link", { name: /admin/ }).click();
+  await page.getByRole("button", { name: "Выйти", exact: true }).click();
+  const storeNav = page.locator(".store-mobile-nav");
+  await storeNav.getByRole("button", { name: "Войти" }).click();
+  await page.getByRole("dialog", { name: "Вход на демостенд" }).waitFor();
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), 390);
 });

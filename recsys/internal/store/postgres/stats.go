@@ -24,5 +24,16 @@ func (s *Store) TableStats(ctx context.Context) (map[string]int64, error) {
 		}
 		out[name] = count
 	}
+	var vectorsExist bool
+	if err := s.pool.QueryRow(ctx, "SELECT to_regclass('recommendations.catalog_offer_embeddings') IS NOT NULL").Scan(&vectorsExist); err != nil {
+		return nil, err
+	}
+	if vectorsExist {
+		var count int64
+		if err := s.pool.QueryRow(ctx, "SELECT count(*) FROM recommendations.catalog_offer_embeddings").Scan(&count); err != nil {
+			return nil, err
+		}
+		out["catalog_offer_embeddings"] = count
+	}
 	return out, nil
 }

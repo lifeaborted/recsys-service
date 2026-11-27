@@ -55,6 +55,7 @@ export function useCloneUi(rootRef: RefObject<HTMLElement | null>, routeKey: str
       cleanups.push(() => {
         prev?.removeEventListener("click", onPrev);
         next?.removeEventListener("click", onNext);
+        delete slider.dataset.cloneReady;
       });
     });
 

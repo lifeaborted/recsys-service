@@ -110,7 +110,7 @@ export async function getRecommendations(
 
   return request<Recommendations>(
     cfg,
-    `/recommendations/me?scenario=${encodeURIComponent(scenario)}&limit=36`,
+    `/recommendations/${cfg.token ? "me" : "guest"}?scenario=${encodeURIComponent(scenario)}&limit=36`,
     { signal: options.signal },
   );
 }
@@ -133,8 +133,8 @@ export async function login(
 export async function me(cfg: RecsysClientConfig): Promise<MeResponse> {
   if (cfg.transport === "mock") {
     return cfg.token === "demo-token-u2"
-      ? { profile_id: "u2", client_id: "DEMO-B2C", client_group: "B2C", login: "demo-b2c" }
-      : { profile_id: "u1", client_id: "DEMO-B2B", client_group: "B2B", login: "demo-b2b" };
+      ? { profile_id: "u2", client_id: "DEMO-B2C", client_group: "B2C", login: "demo-b2c", role: "verified" }
+      : { profile_id: "u1", client_id: "DEMO-B2B", client_group: "B2B", login: "demo-b2b", role: "verified" };
   }
   return request<MeResponse>(cfg, "/users/me");
 }
@@ -158,4 +158,18 @@ export function listProducts(cfg: RecsysClientConfig, signal?: AbortSignal): Pro
 export async function purchase(cfg: RecsysClientConfig, itemId: string): Promise<void> {
   if (cfg.transport === "mock") return;
   await request(cfg, "/purchases", { method: "POST", body: JSON.stringify({ item_id: itemId }) });
+}
+
+export type DebugTarget = "guest" | "notver" | "verb2b" | "verb2c" | "admin";
+
+export interface RecommendationDiagnostics {
+  target: DebugTarget;
+  duration_ms: number;
+  recommendations: Recommendations;
+  tables: Record<string, number>;
+  runs: unknown[];
+}
+
+export function getRecommendationDiagnostics(cfg: RecsysClientConfig, target: DebugTarget, signal?: AbortSignal) {
+  return request<RecommendationDiagnostics>(cfg, `/admin/recommendations?target=${encodeURIComponent(target)}&limit=36`, { signal });
 }

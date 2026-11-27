@@ -2,23 +2,30 @@ import { useEffect, useState } from "react";
 import { fetchProductsPage, RecsysError, type ProductPage } from "../api/client";
 import { RecommendationCard } from "../components/RecommendationCard";
 import { useDebug } from "../state/debug";
-import { useSession } from "../state/session";
-import { useSettings } from "../state/settings";
+import { getRouteParam } from "../lib/routes";
+import { RECSYS_API, useSession } from "../state/session";
 
 const PAGE_SIZE = 48;
 
 export function CatalogPage() {
-  const { settings } = useSettings();
   const session = useSession();
   const { showScores } = useDebug();
   const [page, setPage] = useState(0);
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(() => getRouteParam("q") ?? "");
   const [catalog, setCatalog] = useState<ProductPage | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const token = settings.token || session.profile?.token || "";
-  const baseUrl = settings.baseUrl || "/api";
+  const token = session.profile?.token ?? "";
+  useEffect(() => {
+    function updateQuery() {
+      setQuery(getRouteParam("q") ?? "");
+      setPage(0);
+    }
+    window.addEventListener("hashchange", updateQuery);
+    return () => window.removeEventListener("hashchange", updateQuery);
+  }, []);
+
 
   useEffect(() => {
     if (!token) {
@@ -29,7 +36,7 @@ export function CatalogPage() {
     setLoading(true);
     setError(null);
     fetchProductsPage(
-      { baseUrl, token, timeoutMs: settings.timeoutMs },
+      { baseUrl: RECSYS_API, token, timeoutMs: 5000 },
       { limit: PAGE_SIZE, offset: page * PAGE_SIZE, q: query },
     ).then((result) => {
       if (controller.signal.aborted) return;
@@ -41,7 +48,7 @@ export function CatalogPage() {
       setLoading(false);
     });
     return () => controller.abort();
-  }, [token, baseUrl, settings.timeoutMs, page, query]);
+  }, [token, page, query]);
 
   const total = catalog?.total ?? 0;
   const from = total ? page * PAGE_SIZE + 1 : 0;

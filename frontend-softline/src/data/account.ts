@@ -9,7 +9,7 @@ export interface SoftlineUser {
 
 export const USERS: SoftlineUser[] = [
   {
-    id: "u1", name: "Иван Иванов(Тест)", email: "471hattie@sharebot.net", avatar: "ИИ",
+    id: "u1", name: "Тестовый пользователь", email: "demo@example.test", avatar: "ТП",
     history: ["p002", "p004", "p006"],
     affinities: {
       category: { "Безопасность": 0.95, "Офисное ПО": 0.45 },

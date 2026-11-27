@@ -25,6 +25,7 @@ var (
 
 // Profile represents an isolated personal-account (ЛК) profile bound to a stand client_id.
 type Profile struct {
+	Role     string             `json:"role"`
 	ID       string             `json:"profile_id"`
 	ClientID domain.ClientID    `json:"client_id"`
 	Group    domain.ClientGroup `json:"client_group"`
@@ -329,6 +330,7 @@ func (m *MemoryRepository) CreateAccountWithProfile(_ context.Context, p CreateA
 			Group:    p.ClientGroup,
 			Industry: p.Industry,
 			Login:    p.Login,
+			Role:     "unverified",
 		},
 		CreatedAt: p.CreatedAt,
 	}

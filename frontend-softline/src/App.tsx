@@ -2,27 +2,38 @@ import { useEffect, useState } from "react";
 import { AppShell } from "./components/AppShell";
 import { parseRoute, type RouteKey } from "./lib/routes";
 import { CatalogPage } from "./pages/CatalogPage";
-import { DemoPage } from "./pages/DemoPage";
+import { DiagnosticsPage } from "./pages/DemoPage";
 import { DemoProductPage } from "./pages/DemoProductPage";
-import { InvoicesPage, KeysPage, NotificationsPage, OrdersPage, StaticPage } from "./pages/TablesPage";
 import { OverviewPage } from "./pages/OverviewPage";
-import { ProfilePage } from "./pages/ProfilePage";
-import { RecommendationsPage } from "./pages/RecommendationsPage";
+import { StorefrontPage } from "./pages/StorefrontPage";
+import { InvoicesPage, KeysPage, NotificationsPage, OrdersPage, StaticPage } from "./pages/TablesPage";
 import { DebugProvider } from "./state/debug";
-import { SessionProvider } from "./state/session";
+import { profileStatus, SessionProvider, useSession } from "./state/session";
 import { SettingsProvider } from "./state/settings";
+
+function ProfilePage() {
+  const { profile, logout } = useSession();
+  if (!profile) return null;
+  return (
+    <div className="react-page-inner">
+      <h1>Мой профиль</h1>
+      <p>{profile.login} · {profileStatus(profile)}</p>
+      <button className="clone-link-btn" type="button" onClick={() => { logout(); window.location.hash = "#/overview"; }}>Выйти</button>
+    </div>
+  );
+}
 
 function Page({ route }: { route: RouteKey }) {
   switch (route) {
     case "overview":
-      return <OverviewPage />;
     case "demo":
-      return <DemoPage />;
+      return <OverviewPage />;
     case "demo-product":
       return <DemoProductPage />;
     case "recommendations":
-      return <RecommendationsPage />;
+      return <DiagnosticsPage />;
     case "catalog":
+    case "shop":
       return <CatalogPage />;
     case "invoices":
       return <InvoicesPage />;
@@ -40,13 +51,22 @@ function Page({ route }: { route: RouteKey }) {
       return <StaticPage title="Контакты" text="sales@softline.com · 8 800 232-00-23" />;
     case "subscriptions":
       return <StaticPage title="Подписки" text="Активные подписки вашей компании." />;
-    case "shop":
-      return <StaticPage title="Интернет‑магазин" text="Каталог продуктов Softline." />;
     case "favorites":
       return <StaticPage title="Избранное" text="Сохранённые продукты." />;
-    default:
-      return <OverviewPage />;
   }
+}
+
+function Portal({ route }: { route: RouteKey }) {
+  const { profile } = useSession();
+  useEffect(() => {
+    document.title = profile ? "Личный кабинет · Softline" : "Интернет-магазин Softline · Демостенд";
+  }, [profile]);
+  if (!profile) return <StorefrontPage openLogin={route === "profile"} restricted={route === "recommendations"} />;
+  return (
+    <AppShell key={profile.profile_id} profile={profile} route={route}>
+      <Page route={route} />
+    </AppShell>
+  );
 }
 
 export function App() {
@@ -66,9 +86,7 @@ export function App() {
     <SettingsProvider>
       <SessionProvider>
         <DebugProvider>
-          <AppShell route={route}>
-            <Page route={route} />
-          </AppShell>
+          <Portal route={route} />
         </DebugProvider>
       </SessionProvider>
     </SettingsProvider>

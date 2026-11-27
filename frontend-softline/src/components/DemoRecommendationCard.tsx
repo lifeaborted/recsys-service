@@ -4,8 +4,8 @@ import type { GraphEdge, Recommendation, Variant } from "../api/recsysTypes";
 interface DemoRecommendationCardProps {
   item: Recommendation;
   edges: GraphEdge[];
-  onPurchase: (itemId: string) => void;
-  onShowGraph: () => void;
+  onPurchase?: (itemId: string) => void;
+  onShowGraph?: () => void;
   busy: boolean;
 }
 
@@ -72,12 +72,12 @@ export function DemoRecommendationCard({ item, edges, onPurchase, onShowGraph, b
         <span className="demo-card__link">Ссылка недоступна</span>
       )}
 
-      <a
+      {onPurchase ? <a
         className="demo-card__detail-link"
         href={`#/demo-product?item=${encodeURIComponent(item.item_id)}`}
       >
         Полная информация о товаре →
-      </a>
+      </a> : null}
 
       {item.variants.length > 0 ? (
         <div className="demo-card__section">
@@ -105,7 +105,7 @@ export function DemoRecommendationCard({ item, edges, onPurchase, onShowGraph, b
                     {expiry ? (
                       <div className={expiry.startsWith("Срок") ? "demo-variant__unknown" : ""}>{expiry}</div>
                     ) : null}
-                    <button className="clone-link-btn" type="button" disabled={busy} onClick={() => onPurchase(variant.item_id)}>Купить {variant.item_id}</button>
+                    {onPurchase ? <button className="clone-link-btn" type="button" disabled={busy} onClick={() => onPurchase(variant.item_id)}>Купить {variant.item_id}</button> : null}
                     {variant.url ? (
                       <a className="demo-card__link" href={variant.url} target="_blank" rel="noreferrer">
                         Вариант →
@@ -122,9 +122,9 @@ export function DemoRecommendationCard({ item, edges, onPurchase, onShowGraph, b
       {edges.length > 0 ? (
         <div className="demo-card__section">
           <div className="demo-card__explain-actions">
-            <button className="clone-link-btn clone-link-btn_primary" type="button" onClick={onShowGraph}>
+            {onShowGraph ? <button className="clone-link-btn clone-link-btn_primary" type="button" onClick={onShowGraph}>
               Показать граф
-            </button>
+            </button> : null}
             <button className="clone-link-btn" type="button" onClick={() => setShowReason((value) => !value)}>
               {showReason ? "Скрыть причину" : "Почему рекомендуем"}
             </button>
@@ -136,12 +136,12 @@ export function DemoRecommendationCard({ item, edges, onPurchase, onShowGraph, b
                 return (
                   <div key={edge.id}>
                     <p className="demo-card__reason">{edge.reason}</p>
-                    <div className="demo-card__source">
+                    {onShowGraph ? <div className="demo-card__source">
                       {edge.type} · {edge.source} · {edge.from} → {edge.to}
                       {url ? (
                         <> · <a className="demo-card__link" href={url} target="_blank" rel="noreferrer">Открыть источник</a></>
                       ) : null}
-                    </div>
+                    </div> : null}
                   </div>
                 );
               })}
@@ -150,11 +150,11 @@ export function DemoRecommendationCard({ item, edges, onPurchase, onShowGraph, b
         </div>
       ) : null}
 
-      <div className="demo-card__actions">
+      {onPurchase ? <div className="demo-card__actions">
         <button className="clone-link-btn" type="button" disabled={busy} onClick={() => onPurchase(item.item_id)}>
           Купить товар
         </button>
-      </div>
+      </div> : null}
     </article>
   );
 }

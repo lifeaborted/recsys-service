@@ -19,9 +19,24 @@ func (s *Server) handleGetRecommendationsMe(w http.ResponseWriter, r *http.Reque
 		respond.Error(w, r, http.StatusUnauthorized, "unauthorized", "Missing or invalid session")
 		return
 	}
+	result, ok := s.recommendationsFor(w, r, profile.ClientID)
+	if ok {
+		respond.JSON(w, r, http.StatusOK, result)
+	}
+}
+
+func (s *Server) handleGetGuestRecommendations(w http.ResponseWriter, r *http.Request) {
+	result, ok := s.recommendationsFor(w, r, "DEMO-GUEST")
+	if ok {
+		respond.JSON(w, r, http.StatusOK, result)
+	}
+}
+
+func (s *Server) recommendationsFor(w http.ResponseWriter, r *http.Request, clientID domain.ClientID) (contract.RecommendationResponse, bool) {
+	var zero contract.RecommendationResponse
 	if s.recommender == nil {
 		respond.Error(w, r, http.StatusServiceUnavailable, "model_unavailable", "Recommendation engine unavailable")
-		return
+		return zero, false
 	}
 
 	limit := 0
@@ -29,13 +44,13 @@ func (s *Server) handleGetRecommendationsMe(w http.ResponseWriter, r *http.Reque
 		parsed, err := strconv.Atoi(raw)
 		if err != nil || parsed < 1 || parsed > contract.MaxOnlineRecommendations {
 			respond.Error(w, r, http.StatusBadRequest, "invalid_limit", "limit must be an integer between 1 and 36")
-			return
+			return zero, false
 		}
 		limit = parsed
 	}
 
 	res, err := s.recommender.Recommend(r.Context(), contract.RecommendationQuery{
-		ClientID: profile.ClientID,
+		ClientID: clientID,
 		Mode:     contract.Online,
 		Limit:    limit,
 	})
@@ -48,14 +63,14 @@ func (s *Server) handleGetRecommendationsMe(w http.ResponseWriter, r *http.Reque
 		default:
 			respond.Error(w, r, http.StatusInternalServerError, "recommendation_failed", "Failed to compute recommendations")
 		}
-		return
+		return zero, false
 	}
 
 	normalizeRecommendationResult(&res)
-	respond.JSON(w, r, http.StatusOK, contract.RecommendationResponse{
+	return contract.RecommendationResponse{
 		RequestID:            respond.RequestID(w, r),
 		RecommendationResult: res,
-	})
+	}, true
 }
 
 func normalizeRecommendationResult(res *contract.RecommendationResult) {
