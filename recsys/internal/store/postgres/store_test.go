@@ -190,4 +190,13 @@ func TestPostgresIntegration_ContractsTransactionsAndVersioning(t *testing.T) {
 	if err != nil || len(cands) != 1 || cands[0].ItemID != "ITEM-NO-OFFER-CANDIDATE" || len(cands[0].Evidence) != 1 {
 		t.Fatalf("Candidates returned %+v, err=%v", cands, err)
 	}
+
+	// 4. CatalogMeta returns latest feed version and feed_generated_at timestamp.
+	meta, err := store.CatalogMeta(ctx)
+	if err != nil {
+		t.Fatalf("CatalogMeta: %v", err)
+	}
+	if meta.CatalogVersion != "feed-v2" || meta.FeedGeneratedAt == nil || !meta.FeedGeneratedAt.Equal(feedT2) || meta.ImportedAt == nil {
+		t.Fatalf("unexpected CatalogMeta: %+v", meta)
+	}
 }

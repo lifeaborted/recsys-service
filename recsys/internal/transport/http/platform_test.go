@@ -446,3 +446,144 @@ func TestPlatformModule(t *testing.T) {
 		}
 	}
 }
+
+type catalogMetaStub struct {
+	meta transporthttp.CatalogMetaDTO
+	err  error
+}
+
+func (c catalogMetaStub) CatalogMeta(_ context.Context) (transporthttp.CatalogMetaDTO, error) {
+	return c.meta, c.err
+}
+
+type fixedItemsRecommender struct {
+	items []domain.Recommendation
+}
+
+func (f fixedItemsRecommender) Recommend(_ context.Context, _ contract.RecommendationQuery) (contract.RecommendationResult, error) {
+	return contract.RecommendationResult{
+		SnapshotID: "demo-v1",
+		Items:      f.items,
+		Graph:      domain.Graph{Nodes: []domain.Node{}, Edges: []domain.Evidence{}},
+	}, nil
+}
+
+func TestPlatformCatalogMetaAndCarouselUpTo36(t *testing.T) {
+	authRepo := auth.NewMemoryRepository()
+	authSvc := auth.NewService(authRepo, auth.WithBcryptCost(bcrypt.MinCost))
+	_, sess, err := authSvc.Register(context.Background(), auth.RegisterInput{
+		Login:       "carousel-user",
+		Password:    "carousel-pass",
+		ClientGroup: domain.B2B,
+	})
+	if err != nil {
+		t.Fatalf("register: %v", err)
+	}
+
+	backend := newMemoryPlatformBackend()
+	backend.schemaVer = "0006_offer_embeddings"
+
+	genAt := time.Date(2026, 8, 31, 12, 0, 0, 0, time.UTC)
+	impAt := time.Date(2026, 11, 27, 9, 0, 0, 0, time.UTC)
+	ver := "demo-feed-v1"
+
+	items36 := make([]domain.Recommendation, 36)
+	for i := range items36 {
+		id := domain.ItemID("ITEM-" + string(rune('A'+(i%26))) + "-" + strings.Repeat("X", i/26+1))
+		items36[i] = domain.Recommendation{
+			ItemID:      id,
+			Kind:        domain.Popular,
+			Title:       "Product " + string(id),
+			Explanation: "Popular in cohort",
+			Variants:    []domain.Variant{},
+			EvidenceIDs: []string{},
+		}
+	}
+
+	openAPIBytes, err := os.ReadFile(filepath.Join("..", "..", "..", "api", "openapi.yaml"))
+	if err != nil {
+		t.Fatalf("read openapi.yaml: %v", err)
+	}
+	if !bytes.Contains(openAPIBytes, []byte("maxItems: 36")) {
+		t.Fatalf("expected api/openapi.yaml to allow maxItems: 36")
+	}
+
+	srv := transporthttp.NewServer(transporthttp.Config{
+		Auth:        authSvc,
+		Health:      backend,
+		Catalog:     backend,
+		CatalogMeta: catalogMetaStub{meta: transporthttp.CatalogMetaDTO{CatalogVersion: &ver, FeedGeneratedAt: &genAt, CatalogImportedAt: &impAt}},
+		Purchases:   backend,
+		Recommender: fixedItemsRecommender{items: items36},
+		OpenAPISpec: openAPIBytes,
+	})
+	ts := httptest.NewServer(srv)
+	defer ts.Close()
+
+	// 1. Health reports status=ok, schema_version=0006_offer_embeddings, and catalog feed timestamps.
+	hResp, err := ts.Client().Get(ts.URL + "/api/v1/health")
+	if err != nil {
+		t.Fatalf("GET /health: %v", err)
+	}
+	defer hResp.Body.Close()
+	if hResp.StatusCode != http.StatusOK {
+		t.Fatalf("health status = %d, want 200", hResp.StatusCode)
+	}
+	var hBody map[string]any
+	if err := json.NewDecoder(hResp.Body).Decode(&hBody); err != nil {
+		t.Fatalf("decode health: %v", err)
+	}
+	if hBody["status"] != "ok" || hBody["schema_version"] != "0006_offer_embeddings" || hBody["catalog_version"] != "demo-feed-v1" || hBody["feed_generated_at"] != "2026-08-31T12:00:00Z" {
+		t.Fatalf("unexpected health body: %+v", hBody)
+	}
+
+	// 2. Old schema (< 0004) returns 503 Service Unavailable, never 500.
+	backend.mu.Lock()
+	backend.healthy = false
+	backend.mu.Unlock()
+	oldResp, err := ts.Client().Get(ts.URL + "/api/v1/health")
+	if err != nil {
+		t.Fatalf("GET /health unready: %v", err)
+	}
+	oldResp.Body.Close()
+	if oldResp.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("old schema health status = %d, want 503 (never 500)", oldResp.StatusCode)
+	}
+
+	// 3. Products endpoint includes catalog feed version & date without altering item card fields.
+	reqProd, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/products?limit=2", nil)
+	reqProd.Header.Set("Authorization", "Bearer "+sess.AccessToken)
+	pResp, err := ts.Client().Do(reqProd)
+	if err != nil {
+		t.Fatalf("GET /products: %v", err)
+	}
+	defer pResp.Body.Close()
+	var pBody struct {
+		CatalogVersion    string                     `json:"catalog_version"`
+		FeedGeneratedAt   string                     `json:"feed_generated_at"`
+		CatalogImportedAt string                     `json:"catalog_imported_at"`
+		Items             []transporthttp.ProductDTO `json:"items"`
+	}
+	if err := json.NewDecoder(pResp.Body).Decode(&pBody); err != nil {
+		t.Fatalf("decode /products: %v", err)
+	}
+	if pBody.CatalogVersion != "demo-feed-v1" || pBody.FeedGeneratedAt != "2026-08-31T12:00:00Z" || len(pBody.Items) != 2 {
+		t.Fatalf("unexpected /products response: %+v", pBody)
+	}
+
+	// 4. Recommendations endpoint serves 36 items cleanly while preserving card shape.
+	reqRec, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/recommendations/me", nil)
+	reqRec.Header.Set("Authorization", "Bearer "+sess.AccessToken)
+	rResp, err := ts.Client().Do(reqRec)
+	if err != nil {
+		t.Fatalf("GET /recommendations/me: %v", err)
+	}
+	defer rResp.Body.Close()
+	var recBody contract.RecommendationResponse
+	if err := json.NewDecoder(rResp.Body).Decode(&recBody); err != nil {
+		t.Fatalf("decode /recommendations/me: %v", err)
+	}
+	if len(recBody.Items) != 36 {
+		t.Fatalf("got %d recommendation items, want 36", len(recBody.Items))
+	}
+}

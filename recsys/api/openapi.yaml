@@ -26,6 +26,9 @@ paths:
                 properties:
                   status: {type: string, enum: [ok]}
                   schema_version: {type: string}
+                  catalog_version: {type: string}
+                  feed_generated_at: {type: string, format: date-time}
+                  catalog_imported_at: {type: string, format: date-time}
         '503':
           description: Database or schema is unavailable
           headers:
@@ -166,6 +169,9 @@ paths:
                 type: object
                 required: [items]
                 properties:
+                  catalog_version: {type: string}
+                  feed_generated_at: {type: string, format: date-time}
+                  catalog_imported_at: {type: string, format: date-time}
                   items:
                     type: array
                     items: {$ref: '#/components/schemas/Product'}
@@ -298,7 +304,8 @@ components:
         partial_reason: {type: string, nullable: true}
         items:
           type: array
-          maxItems: 3
+          maxItems: 36
+          description: Метрика Precision@3 считает первые три позиции, остальные позиции предназначены только для экрана.
           items: {$ref: '#/components/schemas/Recommendation'}
         graph:
           $ref: '#/components/schemas/Graph'

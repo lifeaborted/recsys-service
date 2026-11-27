@@ -3,12 +3,16 @@ package transporthttp
 import (
 	"net/http"
 	"strconv"
+	"time"
 
 	"recsys/internal/transport/http/respond"
 )
 
 type productsResponseDTO struct {
-	Items []ProductDTO `json:"items"`
+	CatalogVersion    *string      `json:"catalog_version,omitempty"`
+	FeedGeneratedAt   *string      `json:"feed_generated_at,omitempty"`
+	CatalogImportedAt *string      `json:"catalog_imported_at,omitempty"`
+	Items             []ProductDTO `json:"items"`
 }
 
 func (s *Server) handleGetProducts(w http.ResponseWriter, r *http.Request) {
@@ -35,5 +39,21 @@ func (s *Server) handleGetProducts(w http.ResponseWriter, r *http.Request) {
 	if items == nil {
 		items = []ProductDTO{}
 	}
-	respond.JSON(w, r, http.StatusOK, productsResponseDTO{Items: items})
+
+	out := productsResponseDTO{Items: items}
+	if s.catalogMeta != nil {
+		if meta, err := s.catalogMeta.CatalogMeta(r.Context()); err == nil {
+			out.CatalogVersion = meta.CatalogVersion
+			if meta.FeedGeneratedAt != nil {
+				v := meta.FeedGeneratedAt.UTC().Format(time.RFC3339)
+				out.FeedGeneratedAt = &v
+			}
+			if meta.CatalogImportedAt != nil {
+				v := meta.CatalogImportedAt.UTC().Format(time.RFC3339)
+				out.CatalogImportedAt = &v
+			}
+		}
+	}
+
+	respond.JSON(w, r, http.StatusOK, out)
 }

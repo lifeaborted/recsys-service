@@ -147,6 +147,82 @@ func (s *Store) SessionByTokenHash(ctx context.Context, tokenHash []byte) (auth.
 	return rec, nil
 }
 
+// CatalogMetadata describes the active or most recently imported catalog feed version and timestamps.
+type CatalogMetadata struct {
+	CatalogVersion  string
+	FeedGeneratedAt *time.Time
+	ImportedAt      *time.Time
+}
+
+// CatalogMeta returns the catalog version and timestamps from catalog_feed_versions (preferring the active snapshot)
+// or falls back to catalog_snapshots. Returns an empty struct and nil error if no feed has been loaded yet.
+func (s *Store) CatalogMeta(ctx context.Context) (CatalogMetadata, error) {
+	if s == nil || s.pool == nil {
+		return CatalogMetadata{}, nil
+	}
+
+	var hasFeedVersions bool
+	if err := s.pool.QueryRow(ctx, `
+		SELECT to_regclass('recommendations.catalog_feed_versions') IS NOT NULL
+	`).Scan(&hasFeedVersions); err != nil {
+		return CatalogMetadata{}, err
+	}
+
+	if hasFeedVersions {
+		var ver string
+		var genAt, impAt time.Time
+		err := s.pool.QueryRow(ctx, `
+			SELECT fv.catalog_version, fv.feed_generated_at, fv.imported_at
+			FROM recommendations.catalog_feed_versions fv
+			LEFT JOIN recommendations.model_snapshots ms
+				ON ms.catalog_version = fv.catalog_version AND ms.is_active
+			ORDER BY (ms.snapshot_id IS NOT NULL) DESC, fv.feed_generated_at DESC, fv.imported_at DESC
+			LIMIT 1
+		`).Scan(&ver, &genAt, &impAt)
+		if err == nil {
+			g := genAt.UTC()
+			im := impAt.UTC()
+			return CatalogMetadata{
+				CatalogVersion:  ver,
+				FeedGeneratedAt: &g,
+				ImportedAt:      &im,
+			}, nil
+		}
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return CatalogMetadata{}, err
+		}
+	}
+
+	var hasSnapshots bool
+	if err := s.pool.QueryRow(ctx, `
+		SELECT to_regclass('recommendations.catalog_snapshots') IS NOT NULL
+	`).Scan(&hasSnapshots); err != nil || !hasSnapshots {
+		return CatalogMetadata{}, err
+	}
+
+	var snapID int64
+	var genAt, impAt time.Time
+	err := s.pool.QueryRow(ctx, `
+		SELECT id, (feed_generated_at AT TIME ZONE 'UTC'), imported_at
+		FROM recommendations.catalog_snapshots
+		ORDER BY feed_generated_at DESC, id DESC
+		LIMIT 1
+	`).Scan(&snapID, &genAt, &impAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return CatalogMetadata{}, nil
+	}
+	if err != nil {
+		return CatalogMetadata{}, err
+	}
+	g := genAt.UTC()
+	im := impAt.UTC()
+	return CatalogMetadata{
+		CatalogVersion:  fmt.Sprintf("snapshot-%d", snapID),
+		FeedGeneratedAt: &g,
+		ImportedAt:      &im,
+	}, nil
+}
+
 // CatalogProduct represents a storefront product row returned by ListProducts.
 type CatalogProduct struct {
 	ItemID       domain.ItemID `json:"item_id"`
@@ -486,7 +562,7 @@ func (r *SnapshotRecommender) Recommend(ctx context.Context, q contract.Recommen
 		gk := familyGroupKey{family: meta.FamilyID, kind: c.Kind}
 		idx, exists := groupIdx[gk]
 		if !grouped || !exists {
-			if len(empty.Items) >= 3 {
+			if len(empty.Items) >= 36 {
 				continue
 			}
 			idx = len(empty.Items)
