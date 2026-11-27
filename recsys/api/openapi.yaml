@@ -315,6 +315,8 @@ components:
         family_id: {type: string, nullable: true}
         title: {type: string}
         url: {type: string, format: uri}
+        price: {type: number}
+        currency_code: {type: string}
         explanation: {type: string}
         variants:
           type: array

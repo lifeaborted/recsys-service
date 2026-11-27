@@ -140,6 +140,64 @@ test("демо-экран: карточки, варианты, ошибка и �
     assert.match(reason, /synthetic-rule-1/);
   });
 
+  await t.test("главная кнопка открывает граф в модальном окне", async () => {
+    await page.getByRole("button", { name: "Показать граф" }).first().click();
+    const modal = page.locator(".demo-modal");
+    const dialog = page.getByRole("dialog");
+    await dialog.waitFor();
+    assert.ok(await dialog.isVisible());
+
+    const graph = dialog.locator(".demo-graph");
+    const edges = await graph.locator(".demo-graph__edges").textContent();
+    assert.match(edges, /item:DEMO-BASE → item:DEMO-RENEW-12/);
+    assert.doesNotMatch(edges, /DEMO-UPGRADE|DEMO-COMPLEMENT/, "в граф попали чужие рёбра");
+    assert.ok(await graph.locator("svg").isVisible());
+
+    await dialog.getByRole("button", { name: "Закрыть граф" }).click();
+    await modal.waitFor({ state: "hidden" });
+  });
+
+  await t.test("профиль без истории: две карточки и разные бейджи проверки", async () => {
+    await scenario.selectOption("auto");
+    await profile.selectOption("u3");
+    await page.getByText("требует проверки").first().waitFor();
+    assert.equal(await page.locator(".demo-card").count(), 2);
+    const badges = await page.locator(".demo-card__verification").allTextContents();
+    assert.ok(badges.includes("подтверждено"));
+    assert.ok(badges.includes("требует проверки"));
+    const cards = await page.locator(".demo-cards").textContent();
+    assert.doesNotMatch(cards, /прошл|куплен|продлен/i);
+    assert.equal(await page.getByText("Продление", { exact: false }).count(), 0);
+  });
+
+  await t.test("таблица A/B, варианты и оговорка про текущий фид", async () => {
+    const table = page.locator(".demo-quality__table");
+    await table.waitFor();
+    const headers = await table.locator("thead th").allTextContents();
+    for (const header of ["все", "B2B", "B2C"]) {
+      assert.ok(headers.includes(header), `в таблице нет колонки ${header}`);
+    }
+    const tableText = await table.textContent();
+    assert.match(tableText, /11,97%/);
+    assert.match(tableText, /14,53%/);
+    assert.doesNotMatch(tableText, /55%/, "55% визитов не должно попадать в таблицу Precision@3");
+
+    const quality = await page.locator(".demo-quality").textContent();
+    assert.match(quality, /42 из 121 \(34,71%\)/);
+    assert.match(quality, /27 из 75 \(36%\)/);
+    assert.match(quality, /Около 55% визитов/);
+    assert.match(quality, /не Precision@3/);
+    assert.match(quality, /Дата фида: 2026-11-27/);
+    assert.match(quality, /Исторического снимка каталога нет/);
+    assert.match(quality, /продаж до 31\.08\.2026/);
+
+    const chart = page.locator(".demo-chart");
+    await chart.waitFor();
+    assert.match(await chart.textContent(), /Precision@3: A против B/);
+    assert.equal(await chart.locator(".demo-chart__bar").count(), 18);
+    assert.match(await chart.locator(".demo-chart__note").textContent(), /в график не входят/);
+  });
+
   await t.test("частичная и пустая выдача", async () => {
     await scenario.selectOption("partial");
     await page.getByText("insufficient_eligible_products").waitFor();

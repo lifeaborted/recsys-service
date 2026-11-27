@@ -19,6 +19,8 @@ type Product struct {
 	FamilyID, FamilySource string
 	Differences            []domain.Difference
 	Vendor, CategoryID     string
+	Price                  *float64
+	CurrencyCode           *string
 }
 
 func eligible(p Product, client domain.Client, platforms map[string]bool, mode contract.Mode) bool {

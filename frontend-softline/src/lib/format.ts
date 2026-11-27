@@ -9,7 +9,7 @@ const dateTimeFormat = new Intl.DateTimeFormat("ru-RU", {
 
 export function formatPrice(value: number | undefined, currency = "RUB"): string {
   if (typeof value !== "number" || Number.isNaN(value)) return "—";
-  const suffix = currency === "RUB" || currency === "₽" ? "₽" : currency;
+  const suffix = currency === "RUB" || currency === "RUR" || currency === "₽" ? "₽" : currency;
   return `${numberFormat.format(value)} ${suffix}`;
 }
 

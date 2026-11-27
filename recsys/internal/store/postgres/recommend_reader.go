@@ -50,7 +50,8 @@ func (s *Store) Products(ctx context.Context, snapshot string, ids []domain.Item
    COALESCE(f.audience,''),COALESCE(f.available,false),
    COALESCE(f.in_sales, EXISTS(SELECT 1 FROM recommendations.sales sales WHERE sales.item_id=i.item_id)),
    COALESCE(f.family_id,''),COALESCE(f.family_source,''),COALESCE(f.differences,'[]'::jsonb),COALESCE(f.organization_type,''),
-   COALESCE(v.name, vo.vendor_name, ''), COALESCE(o.category_id, vo.category_id, '')
+   COALESCE(v.name, vo.vendor_name, ''), COALESCE(o.category_id, vo.category_id, ''),
+    o.price, COALESCE(o.currency_code, vo.currency_code, '')
   FROM recommendations.model_snapshots m
   JOIN recommendations.historical_items i ON i.item_id=ANY($2::text[])
   LEFT JOIN recommendations.item_feature_versions f ON f.feature_version=m.feature_version AND f.item_id=i.item_id
@@ -67,7 +68,8 @@ func (s *Store) Products(ctx context.Context, snapshot string, ids []domain.Item
 		var id domain.ItemID
 		var p recommend.Product
 		if err := rows.Scan(&id, &p.Title, &p.OfferID, &p.SKU, &p.URL, &p.Platform, &p.Audience, &p.Available, &p.InSales,
-			&p.FamilyID, &p.FamilySource, &p.Differences, &p.OrganizationType, &p.Vendor, &p.CategoryID); err != nil {
+			&p.FamilyID, &p.FamilySource, &p.Differences, &p.OrganizationType, &p.Vendor, &p.CategoryID,
+			&p.Price, &p.CurrencyCode); err != nil {
 			return nil, err
 		}
 		result[id] = p

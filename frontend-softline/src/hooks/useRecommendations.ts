@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { RecsysError, fetchRecommendations } from "../api/client";
-import { mockRecommendations } from "../api/mock";
+import { applyLiveScenario, mockRecommendations } from "../api/mock";
 import type { RecommendationResponse, Scenario } from "../api/types";
 import { useSettings } from "../state/settings";
 
@@ -71,9 +71,12 @@ export function useRecommendations({
       try {
         const data = mockMode
           ? await mockRecommendations({ userId: normalizedUser, limit, scenario })
-          : await fetchRecommendations(
-              { baseUrl, token, timeoutMs },
-              { userId: normalizedUser, limit, scenario, signal: controller.signal },
+          : applyLiveScenario(
+              await fetchRecommendations(
+                { baseUrl, token, timeoutMs },
+                { userId: normalizedUser, limit, scenario, signal: controller.signal },
+              ),
+              { userId: normalizedUser, scenario, limit },
             );
 
         if (controller.signal.aborted) return;

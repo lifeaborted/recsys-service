@@ -33,7 +33,11 @@ func render(snapshot string, mode contract.Mode, ordered []ranked, cards map[dom
 			if title == "" {
 				title = string(r.id)
 			}
-			out.Items = append(out.Items, domain.Recommendation{ItemID: r.id, Kind: r.kind, OfferID: p.OfferID, SKU: p.SKU, URL: p.URL, FamilyID: family, Title: title, Explanation: r.proof[0].Reason, Variants: []domain.Variant{}, EvidenceIDs: []string{}})
+			var currency *string
+			if p.CurrencyCode != nil && *p.CurrencyCode != "" {
+				currency = p.CurrencyCode
+			}
+			out.Items = append(out.Items, domain.Recommendation{ItemID: r.id, Kind: r.kind, OfferID: p.OfferID, SKU: p.SKU, URL: p.URL, Price: p.Price, CurrencyCode: currency, FamilyID: family, Title: title, Explanation: r.proof[0].Reason, Variants: []domain.Variant{}, EvidenceIDs: []string{}})
 			if grouped {
 				groups[g] = idx
 			}

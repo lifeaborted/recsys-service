@@ -57,7 +57,7 @@ function normalizeItem(raw: unknown, index: number): RecommendationItem {
     score: asNumber(raw.score) ?? 0,
     reason: asString(raw.reason) ?? asString(raw.explanation),
     price: asNumber(raw.price),
-    currency: asString(raw.currency),
+    currency: asString(raw.currency) ?? asString(raw.currency_code),
     tags,
     image_url: asString(raw.image_url) ?? asString(raw.image),
     url: asString(raw.url) ?? asString(raw.link),
@@ -185,6 +185,23 @@ async function request<T>(
     window.clearTimeout(timer);
     externalSignal?.removeEventListener("abort", onAbort);
   }
+}
+
+export interface StandSession {
+  access_token: string;
+  expires_at?: string;
+}
+
+/** Вход в синтетический аккаунт стенда: нужен, чтобы смена пользователя меняла выдачу. */
+export async function loginStand(
+  config: RecsysConfig,
+  login: string,
+  password: string,
+): Promise<StandSession> {
+  return request<StandSession>(config, "/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ login, password }),
+  });
 }
 
 export interface RecommendationParams {

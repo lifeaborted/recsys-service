@@ -15,6 +15,7 @@ const full = load("recommendations.full.json");
 const partial = load("recommendations.partial.json");
 const empty = load("recommendations.empty.json");
 const failed = load("recommendations.error.json");
+const verified = load("recommendations.verified.json");
 
 function assertEdgesResolvable(payload, label) {
   const nodes = new Set(payload.graph.nodes.map((node) => node.id));
@@ -108,4 +109,32 @@ test("ошибка содержит request_id и код", () => {
   assert.equal(typeof failed.error.code, "string");
   assert.equal(typeof failed.error.message, "string");
   assert.ok(!failed.items, "ошибка не должна содержать items");
+});
+
+test("пример с проверкой совместимости отделяет подтверждённое от «требует проверки»", () => {
+  assert.equal(verified.items.length, 2);
+  assert.ok(verified.items.length < 4, "в новом примере не должно быть четвёртой карточки");
+  assert.equal(verified.partial_reason, null);
+  verified.items.forEach((item, index) => assertItemShape(item, `verified.items[${index}]`));
+
+  const confirmed = verified.items.find((item) => item.verification === "confirmed");
+  const requiresCheck = verified.items.find((item) => item.verification === "requires_check");
+  assert.ok(confirmed, "нет подтверждённой карточки");
+  assert.ok(requiresCheck, "нет карточки «требует проверки»");
+  assert.notEqual(confirmed.verification, requiresCheck.verification);
+  assert.ok(
+    confirmed.recommendation_kind === "upgrade" || confirmed.recommendation_kind === "complement",
+    "подтверждённая карточка должна быть апгрейдом или дополнением",
+  );
+  assert.ok(
+    !verified.items.some((item) => item.recommendation_kind === "renewal"),
+    "в примере проверки не должно быть продления",
+  );
+  assertEdgesResolvable(verified, "verified");
+});
+
+test("новый пример с проверкой не ломает старый пример на три карточки", () => {
+  assert.equal(full.items.length, 3);
+  assert.ok(!full.items.some((item) => item.verification === "requires_check"));
+  assertEdgesResolvable(full, "full-after-verified");
 });

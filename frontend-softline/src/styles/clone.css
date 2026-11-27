@@ -266,6 +266,188 @@
 .demo-banner_error { background: #fdecef; color: #a20c33; }
 .demo-status { margin-bottom: 16px; font-size: 12px; color: #74767c; }
 
+/* Карусель: все карточки ответа, но не больше 36. */
+.demo-carousel-section { margin-top: 20px; }
+.demo-carousel__head { display: flex; gap: 12px; flex-wrap: wrap; align-items: baseline; margin-bottom: 10px; }
+.demo-carousel__head h2 { margin: 0; font-size: 18px; line-height: 24px; }
+.demo-carousel__caption { margin: 0; font-size: 12px; color: #74767c; }
+.demo-carousel {
+  display: flex;
+  grid-template-columns: none;
+  gap: 16px;
+  overflow-x: auto;
+  padding: 4px 4px 14px;
+  scroll-snap-type: x proximity;
+  -webkit-overflow-scrolling: touch;
+}
+.demo-carousel .demo-card {
+  flex: 0 0 320px;
+  max-width: 320px;
+  scroll-snap-align: start;
+}
+
+/* Бейдж статуса проверки совместимости. */
+.demo-card__badges { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+.demo-card__badges .demo-card__kind { margin-bottom: 0; }
+.demo-card__verification {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.demo-card__verification_confirmed { background: #e8f5e9; color: #1b5e20; }
+.demo-card__verification_check { background: #fff3e0; color: #a35a00; border: 1px dashed #e0a800; }
+.demo-card_requires-check { border: 1px dashed #e0a800; box-shadow: 0 1px 2px rgba(224, 168, 0, .18); }
+
+/* Главная кнопка объяснения — граф, текст «Почему рекомендуем» остаётся вторым. */
+.demo-card__explain-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
+.clone-link-btn_primary { background: #a20c33; border-color: #a20c33; color: #fff; }
+.clone-link-btn_primary:hover { background: #86102b; }
+
+/* Граф связи карточки. */
+.demo-graph {
+  margin-top: 8px;
+  padding: 12px;
+  border: 1px solid #eee;
+  border-radius: 12px;
+  background: #fafafb;
+}
+.demo-graph_empty { color: #74767c; font-size: 12px; }
+.demo-graph__head { display: flex; gap: 8px; flex-wrap: wrap; align-items: baseline; margin-bottom: 6px; font-size: 12px; }
+.demo-graph__head span { color: #74767c; }
+.demo-graph__canvas { width: 100%; height: auto; display: block; }
+.demo-graph__node { fill: #fff; stroke: #d9d9e0; stroke-width: 1.2; }
+.demo-graph__node_target { stroke: #a20c33; stroke-width: 1.8; }
+.demo-graph__node-label { fill: #2b2b31; font-size: 13px; }
+.demo-graph__edge-label { fill: #a20c33; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+.demo-graph__edges { margin: 8px 0 0; padding-left: 18px; font-size: 11px; color: #74767c; }
+.demo-graph__edges li + li { margin-top: 4px; }
+
+/* Граф открывается в отдельном окне: на карточке схема была слишком мелкой. */
+.demo-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(20, 20, 24, .55);
+}
+.demo-modal__window {
+  width: min(900px, 96vw);
+  max-height: 90vh;
+  overflow: auto;
+  padding: 22px 24px;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, .25);
+}
+.demo-modal__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid #eee;
+}
+.demo-modal__head h2 { margin: 0; font-size: 20px; line-height: 26px; }
+.demo-modal__subtitle { margin: 4px 0 0; font-size: 12px; color: #74767c; }
+.demo-modal__close {
+  flex: 0 0 34px;
+  height: 34px;
+  border: 1px solid #d9d9e0;
+  border-radius: 8px;
+  background: #fff;
+  color: #4b4d54;
+  font: 400 22px/30px inherit;
+  cursor: pointer;
+}
+.demo-modal__close:hover { background: #fdecef; color: #a20c33; }
+.demo-modal .demo-graph { margin-top: 16px; padding: 14px; border-color: #eee; }
+.demo-modal .demo-graph__head { font-size: 13px; }
+.demo-modal .demo-graph__canvas { max-height: 60vh; }
+.demo-modal__foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid #eee;
+  font-size: 12px;
+  color: #74767c;
+}
+
+/* Таблица качества и оговорки. */
+.demo-quality {
+  margin-top: 24px;
+  padding: 20px;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .05);
+}
+.demo-quality__head { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+.demo-quality__head h2 { margin: 0; font-size: 18px; line-height: 24px; }
+.demo-quality__provisional {
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #fff3e0;
+  color: #a35a00;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+.demo-quality__scroll { overflow-x: auto; }
+.demo-quality__table { border-collapse: collapse; width: 100%; min-width: 620px; font-size: 13px; }
+.demo-quality__table th, .demo-quality__table td { padding: 8px 10px; border-bottom: 1px solid #eee; text-align: right; }
+.demo-quality__table th:first-child, .demo-quality__table td:first-child { text-align: left; }
+.demo-quality__table thead th { color: #74767c; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+.demo-quality__table tbody th { font-weight: 600; }
+.demo-quality__line { margin: 10px 0 0; font-size: 13px; line-height: 19px; color: #4b4d54; }
+.demo-quality__line_note { color: #74767c; font-size: 12px; }
+.demo-quality__line_feed { padding-top: 10px; border-top: 1px solid #eee; }
+
+/* График под таблицей: те же данные A/B, но в виде полос. */
+.demo-chart { margin-top: 22px; padding-top: 18px; border-top: 1px solid #eee; }
+.demo-chart__head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 14px; }
+.demo-chart__head h3 { margin: 0; font-size: 16px; line-height: 22px; }
+.demo-chart__legend { display: flex; gap: 16px; font-size: 12px; color: #74767c; }
+.demo-chart__swatch { display: inline-block; width: 11px; height: 11px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+.demo-chart__swatch_a { background: #9aa0a6; }
+.demo-chart__swatch_b { background: #a20c33; }
+.demo-chart__group + .demo-chart__group { margin-top: 18px; }
+.demo-chart__group h4 { margin: 0 0 8px; font-size: 14px; }
+.demo-chart__row { display: grid; grid-template-columns: 74px 1fr; gap: 10px; align-items: center; margin-bottom: 6px; }
+.demo-chart__cohort { font-size: 12px; color: #74767c; }
+.demo-chart__bars { display: flex; flex-direction: column; gap: 4px; }
+.demo-chart__bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 82px;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: 4px;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.demo-chart__bar_a { background: #9aa0a6; }
+.demo-chart__bar_b { background: #a20c33; }
+.demo-chart__note { margin: 14px 0 0; font-size: 12px; line-height: 18px; color: #74767c; }
+
+@media (max-width: 767px) {
+  .demo-carousel .demo-card { flex-basis: 280px; max-width: 280px; }
+  .demo-modal { padding: 12px; }
+  .demo-modal__window { padding: 16px; }
+  .demo-chart__row { grid-template-columns: 58px 1fr; gap: 6px; }
+  .demo-chart__bar { min-width: 74px; font-size: 10px; }
+}
+
 @media (max-width: 1023px) {
   .react-page .react-sidebar-slot { display: none; }
 }

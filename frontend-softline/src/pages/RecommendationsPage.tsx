@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
 import {
-  createRun,
   fetchDbStats,
   fetchRuns,
   RecsysError,
@@ -21,10 +20,10 @@ export function RecommendationsPage() {
   const { settings, update } = useSettings();
   const [stats, setStats] = useState<DbStats | null>(null);
   const [runs, setRuns] = useState<RunInfo[]>([]);
+  const [localRuns, setLocalRuns] = useState<RunInfo[]>([]);
   const [clientId, setClientId] = useState("—");
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
 
   const apiConfig = {
     baseUrl: settings.baseUrl,
@@ -69,23 +68,24 @@ export function RecommendationsPage() {
     void loadDb();
   }, [loadDb]);
 
-  const handleNewRun = async () => {
-    setBusy(true);
+  const handleNewRun = () => {
     setNotice(null);
-    try {
-      if (settings.mockMode) {
-        setNotice("В mock-режиме новый run не создаётся — включите реальный API в Профиле.");
-      } else {
-        const created = await createRun(apiConfig, settings.userId);
-        setNotice(`Создан run #${created.run_id}, товаров: ${created.count}`);
-        await loadDb();
-      }
-      reco.refresh();
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Ошибка создания run");
-    } finally {
-      setBusy(false);
+    if (settings.mockMode) {
+      setNotice("В mock-режиме новый run не создаётся — включите реальный API в Профиле.");
+      return;
     }
+    const items = (reco.data?.items ?? []).slice(0, settings.limit);
+    const run: RunInfo = {
+      run_id: Date.now() % 1_000_000,
+      model_version: stats?.model_version ?? "local",
+      requested_at: new Date().toISOString(),
+      items,
+      clicks: 0,
+      purchases: 0,
+    };
+    setLocalRuns((previous) => [run, ...previous]);
+    setNotice(`Создан локальный run #${run.run_id}, товаров: ${items.length}`);
+    reco.refresh();
   };
 
   const handleFeedback = async (item: RecommendationItem, action: "click" | "purchase") => {
@@ -102,6 +102,12 @@ export function RecommendationsPage() {
       if (settings.mockMode) await mockFeedback(payload);
       else await sendFeedback(apiConfig, payload);
       setNotice(`Событие «${action === "click" ? "click" : "purchase"}» записано для ${item.item_id}`);
+      setLocalRuns((previous) => previous.map((run, index) => {
+        if (index !== 0) return run;
+        return action === "click"
+          ? { ...run, clicks: run.clicks + 1 }
+          : { ...run, purchases: run.purchases + 1 };
+      }));
       await loadDb();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Ошибка записи события");
@@ -109,6 +115,7 @@ export function RecommendationsPage() {
   };
 
   const tableCounts = stats?.tables ?? {};
+  const visibleRuns = [...localRuns, ...runs];
 
   return (
     <div className="react-page-inner">
@@ -200,7 +207,10 @@ export function RecommendationsPage() {
           <button
             className="button button_primary button_size-l"
             type="button"
-            onClick={reco.refresh}
+            onClick={() => {
+              setNotice("Выдача запрошена повторно");
+              reco.refresh();
+            }}
             disabled={reco.status === "loading"}
           >
             {reco.status === "loading" ? "Запрос…" : "Запросить выдачу"}
@@ -208,10 +218,9 @@ export function RecommendationsPage() {
           <button
             className="button button_default button_size-l"
             type="button"
-            onClick={() => void handleNewRun()}
-            disabled={busy}
+            onClick={handleNewRun}
           >
-            {busy ? "Создаём…" : "Новый run"}
+            Новый run
           </button>
         </div>
         <p className="form-note">
@@ -219,6 +228,9 @@ export function RecommendationsPage() {
             ? `${reco.meta.mode} · ${formatDateTime(reco.meta.at)} · ${formatDuration(reco.meta.durationMs)} · ${reco.meta.requestUrl}`
             : "Запросов ещё не было"}
         </p>
+        {!settings.mockMode && settings.scenario !== "demo" ? (
+          <p className="form-note">Сценарий применён на клиенте: публичный API не принимает scenario.</p>
+        ) : null}
         {notice ? <p className="form-note">{notice}</p> : null}
         {error ? <p className="form-note error">{error}</p> : null}
       </div>
@@ -290,7 +302,7 @@ export function RecommendationsPage() {
             </tr>
           </thead>
           <tbody>
-            {runs.map((run) => (
+            {visibleRuns.map((run) => (
               <tr key={run.run_id}>
                 <td>{run.run_id}</td>
                 <td>{formatDateTime(run.requested_at)}</td>
@@ -304,7 +316,10 @@ export function RecommendationsPage() {
             ))}
           </tbody>
         </table>
-        {!runs.length ? <div className="reco-empty">Run'ов пока нет — нажмите «Новый run»</div> : null}
+        {!visibleRuns.length ? <div className="reco-empty">Run'ов пока нет — нажмите «Новый run»</div> : null}
+        <p className="form-note">
+          Run'ы создаются локально: в публичном OpenAPI нет отдельного эндпоинта run.
+        </p>
       </div>
     </div>
   );

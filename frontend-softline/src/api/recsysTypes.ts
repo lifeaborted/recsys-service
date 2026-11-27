@@ -14,6 +14,8 @@ export interface Variant {
   differences: Difference[];
 }
 
+export type VerificationStatus = "confirmed" | "requires_check";
+
 export interface Recommendation {
   item_id: string;
   offer_id?: string;
@@ -25,6 +27,11 @@ export interface Recommendation {
   explanation: string;
   variants: Variant[];
   evidence_ids: string[];
+  /**
+   * Демо-пометка о том, что совместимость подтверждена или требует проверки.
+   * Боевой API это поле пока не отдаёт, поэтому оно необязательное.
+   */
+  verification?: VerificationStatus;
 }
 
 export interface GraphNode {
@@ -75,4 +82,4 @@ export interface MeResponse {
   login: string;
 }
 
-export type DemoScenario = "full" | "partial" | "empty" | "error" | "slow" | "auto";
+export type DemoScenario = "full" | "partial" | "empty" | "error" | "slow" | "check" | "auto";

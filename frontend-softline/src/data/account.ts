@@ -38,6 +38,16 @@ export function findUser(id: string): SoftlineUser {
   return USERS.find((user) => user.id === id) ?? USERS[0];
 }
 
+/**
+ * Синтетические аккаунты стенда. Пользователь на экране выбирает личность ЛК,
+ * а смена аккаунта реально меняет Bearer-сессию и выдачу API.
+ */
+export function demoCredentials(userId: string): { login: string; password: string } {
+  if (userId === "u2") return { login: "demo-b2c", password: "demo-b2c-pass" };
+  if (userId === "u3") return { login: "demo-cold", password: "demo-b2c-pass" };
+  return { login: "demo-b2b", password: "demo-b2b-pass" };
+}
+
 export interface OrderRow {
   id: string;
   date: string;

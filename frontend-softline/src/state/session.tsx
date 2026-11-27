@@ -19,11 +19,14 @@ export interface DemoProfile {
   login: string;
   group: "B2B" | "B2C";
   token: string;
+  /** Синтетический профиль без истории: доступен только на mock-транспорте. */
+  mockOnly?: boolean;
 }
 
 export const DEMO_PROFILES: DemoProfile[] = [
   { id: "u1", login: "demo-b2b", group: "B2B", token: "demo-token-u1" },
   { id: "u2", login: "demo-b2c", group: "B2C", token: "demo-token-u2" },
+  { id: "u3", login: "demo-cold", group: "B2C", token: "demo-token-u3", mockOnly: true },
 ];
 
 interface SessionState {
@@ -67,11 +70,20 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const signIn = useCallback(async (id: string, transport: Transport) => {
     const current = ++attempt.current;
     const profile = DEMO_PROFILES.find((item) => item.id === id) ?? DEMO_PROFILES[0];
+    if (transport === "http" && profile.mockOnly) {
+      setState((prev) => ({
+        ...prev,
+        error: "Профиль без истории доступен только на синтетическом транспорте.",
+      }));
+      return;
+    }
     setState((prev) => ({ ...prev, transport, profile: null, error: undefined, generation: prev.generation + 1 }));
     let signed = profile;
     if (transport === "http") {
       try {
-        const password = profile.id === "u2" ? (import.meta.env.VITE_DEMO_B2C_PASSWORD ?? "demo-b2c-pass") : (import.meta.env.VITE_DEMO_B2B_PASSWORD ?? "demo-b2b-pass");
+        const password = profile.group === "B2C"
+          ? (import.meta.env.VITE_DEMO_B2C_PASSWORD ?? "demo-b2c-pass")
+          : (import.meta.env.VITE_DEMO_B2B_PASSWORD ?? "demo-b2b-pass");
         const session = await login({ baseUrl: import.meta.env.VITE_RECSYS_API_BASE ?? "/api/v1", transport, token: "" }, profile.login, password);
         signed = { ...profile, token: session.access_token };
       } catch (error) {
@@ -98,7 +110,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     }
   }, [state.transport, state.profile, state.error, state.preferredId, signIn]);
 
-  const loginAs = useCallback((id: string) => { void signIn(id, state.transport); }, [signIn, state.transport]);
+  const loginAs = useCallback((id: string) => {
+    const profile = DEMO_PROFILES.find((item) => item.id === id);
+    // Профиль без истории живёт только в синтетическом примере, поэтому включает mock.
+    const transport: Transport = profile?.mockOnly ? "mock" : state.transport;
+    void signIn(id, transport);
+  }, [signIn, state.transport]);
 
   const logout = useCallback(() => {
     attempt.current++;
@@ -112,7 +129,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const setTransport = useCallback((transport: Transport) => {
-    void signIn(state.profile?.id ?? "u1", transport);
+    const current = DEMO_PROFILES.find((item) => item.id === state.profile?.id);
+    const nextId = transport === "http" && current?.mockOnly ? "u1" : (state.profile?.id ?? "u1");
+    void signIn(nextId, transport);
   }, [signIn, state.profile?.id]);
 
   const setScenario = useCallback((scenario: DemoScenario) => {
