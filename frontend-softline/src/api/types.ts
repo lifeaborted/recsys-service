@@ -13,6 +13,7 @@ export interface RecommendationItem {
   price?: number;
   currency?: string;
   hasHistory?: boolean;
+  available?: boolean;
   tags?: string[];
   image_url?: string;
   url?: string;

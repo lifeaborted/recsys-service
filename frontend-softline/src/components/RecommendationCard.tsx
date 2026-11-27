@@ -13,7 +13,8 @@ interface RecommendationCardProps {
 export function RecommendationCard({ item, showScores, onFeedback }: RecommendationCardProps) {
   const product = findProduct(item.item_id);
   const image = item.image_url || product?.image || "/assets/scale-dec-168x168.png";
-  const url = item.url || product?.url || "#";
+  const synthetic = item.item_id.startsWith("DEMO-");
+  const url = synthetic ? "#/demo-product?item=" + encodeURIComponent(item.item_id) : item.url || product?.url || "#";
   const vendor = item.subtitle || product?.vendor || item.category || "";
   const price = item.price ?? product?.price ?? 0;
 
@@ -31,7 +32,7 @@ export function RecommendationCard({ item, showScores, onFeedback }: Recommendat
         className="suggestion__image-box"
         data-v-b629fb3c=""
         href={url}
-        target="_blank"
+        target={synthetic ? undefined : "_blank"}
         rel="noreferrer"
         onClick={handleClick}
       >
@@ -45,7 +46,7 @@ export function RecommendationCard({ item, showScores, onFeedback }: Recommendat
           className="suggestion__description"
           data-v-b629fb3c=""
           href={url}
-          target="_blank"
+          target={synthetic ? undefined : "_blank"}
           rel="noreferrer"
           onClick={handleClick}
         >
@@ -70,7 +71,7 @@ export function RecommendationCard({ item, showScores, onFeedback }: Recommendat
         className="button button_primary button_size-l button_block link-reset mt-12"
         data-v-b629fb3c=""
         href={url}
-        target="_blank"
+        target={synthetic ? undefined : "_blank"}
         rel="noreferrer"
         onClick={handleClick}
       >

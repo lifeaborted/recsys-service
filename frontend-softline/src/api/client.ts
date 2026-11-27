@@ -67,6 +67,7 @@ function normalizeItem(raw: unknown, index: number): RecommendationItem {
     reason: asString(raw.reason) ?? asString(raw.explanation),
     price: asNumber(raw.price),
     currency: asString(raw.currency) ?? asString(raw.currency_code),
+    available: typeof raw.available === "boolean" ? raw.available : undefined,
     hasHistory: raw.has_history === true,
     tags,
     image_url: asString(raw.image_url) ?? asString(raw.image),

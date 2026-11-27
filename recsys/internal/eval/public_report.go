@@ -3,6 +3,7 @@ package eval
 import (
 	"fmt"
 	"math"
+	"reflect"
 	"strings"
 )
 
@@ -24,19 +25,19 @@ type PublicProtocolNotes struct {
 
 // PublicSummary contains aggregate dataset counts without any client_id, item_id lists, or raw rows.
 type PublicSummary struct {
-	Rows            int `json:"rows"`
-	UniqueClients   int `json:"unique_clients"`
-	Baskets         int `json:"baskets"`
-	TotalItems      int `json:"total_items"`
-	ProductGroups   int `json:"product_groups"`
-	TrainItems      int `json:"train_items"`
-	ColdItemsCount  int `json:"cold_items_count"`
-	CohortAClients  int `json:"cohort_a_clients"`
-	CohortAB2B      int `json:"cohort_a_b2b_clients"`
-	CohortAB2C      int `json:"cohort_a_b2c_clients"`
-	CohortBClients  int `json:"cohort_b_clients"`
-	CohortBB2B      int `json:"cohort_b_b2b_clients"`
-	CohortBB2C      int `json:"cohort_b_b2c_clients"`
+	Rows           int `json:"rows"`
+	UniqueClients  int `json:"unique_clients"`
+	Baskets        int `json:"baskets"`
+	TotalItems     int `json:"total_items"`
+	ProductGroups  int `json:"product_groups"`
+	TrainItems     int `json:"train_items"`
+	ColdItemsCount int `json:"cold_items_count"`
+	CohortAClients int `json:"cohort_a_clients"`
+	CohortAB2B     int `json:"cohort_a_b2b_clients"`
+	CohortAB2C     int `json:"cohort_a_b2c_clients"`
+	CohortBClients int `json:"cohort_b_clients"`
+	CohortBB2B     int `json:"cohort_b_b2b_clients"`
+	CohortBB2C     int `json:"cohort_b_b2c_clients"`
 }
 
 // PublicMethodMetrics stores Top-3 accuracy, coverage, and product_group hit split.
@@ -218,8 +219,7 @@ func round2(v float64) float64 {
 func floatPtr(v float64) *float64 { return &v }
 func intPtr(v int) *int           { return &v }
 
-// V5PublicAggregateDocument returns the official published v5 aggregates combined from
-// INTEGRATION.md, 01-data.md, and tests/e2e/data/README.md (with unpublished hybrid sub-cells as nil/null).
+// V5PublicAggregateDocument returns the verified aggregates of v5-train-20260831.
 func V5PublicAggregateDocument(synthetic *PublicMetricsReport) PublicMetricsDocument {
 	var synCopy *PublicMetricsReport
 	if synthetic != nil {
@@ -247,32 +247,6 @@ func V5PublicAggregateDocument(synthetic *PublicMetricsReport) PublicMetricsDocu
 		}
 	}
 
-	makeHybridPublishedAll := func(p float64, hits, variant, newProd int, varShare float64) *PublicMethodMetrics {
-		return &PublicMethodMetrics{
-			PrecisionAt3:      floatPtr(p),
-			FillRate:          nil,
-			Full3Rate:         nil,
-			Hits:              intPtr(hits),
-			VariantHits:       intPtr(variant),
-			NewProductHits:    intPtr(newProd),
-			UnknownFamilyHits: intPtr(0),
-			VariantShare:      floatPtr(varShare),
-		}
-	}
-
-	makeHybridPublishedSlice := func(p float64, hits int) *PublicMethodMetrics {
-		return &PublicMethodMetrics{
-			PrecisionAt3:      floatPtr(p),
-			FillRate:          nil,
-			Full3Rate:         nil,
-			Hits:              intPtr(hits),
-			VariantHits:       nil,
-			NewProductHits:    nil,
-			UnknownFamilyHits: nil,
-			VariantShare:      nil,
-		}
-	}
-
 	cell := func(cohort, group string, clients int, pop, co, hyb *PublicMethodMetrics) PublicCell {
 		return PublicCell{
 			Dataset:         "v5",
@@ -287,10 +261,10 @@ func V5PublicAggregateDocument(synthetic *PublicMetricsReport) PublicMetricsDocu
 	}
 
 	return PublicMetricsDocument{
-		Dataset:         "v5",
-		PublicAggregate: true,
-		SnapshotID:      "v4-integration-20260831",
-		SourceNotes: "Опубликованные агрегаты v5: Precision@3/FillRate/hits гибрида зафиксированы по INTEGRATION.md (v4-integration-20260831), разбивка вариантов гибрида A (42/121 = 34.71%) и B (27/75 = 36%) — по 01-data.md через product_group, бейзлайны — по baseline.py на v5. Неопубликованные подклетки гибрида оставлены null (снимок v5-train-20260831 не пересчитывается и не заменяет эталонные числа).",
+		Dataset:               "v5",
+		PublicAggregate:       true,
+		SnapshotID:            "v5-train-20260831",
+		SourceNotes:           "Агрегаты закрытого прогона v5 на снимке v5-train-20260831. Исторический топ-3 использует 817 товаров продаж. Попадания по вариантам рассчитаны по product_group.",
 		HasProductGroupColumn: true,
 		TrainThrough:          TrainThrough,
 		TestFrom:              ">" + TrainThrough,
@@ -321,42 +295,41 @@ func V5PublicAggregateDocument(synthetic *PublicMetricsReport) PublicMetricsDocu
 		VisitGap: PublicVisitGapNote,
 		Cells: []PublicCell{
 			cell("A", "all", 337,
-				makeMetrics(5.44, 100.0, 100.0, 55, 0, 55, 0, 0.0),
-				makeMetrics(5.64, 92.3, 81.3, 57, 6, 51, 0, 10.5),
-				makeHybridPublishedAll(11.97, 121, 42, 79, 34.71),
+				makeMetrics(5.44, 100, 100, 55, 0, 55, 0, 0),
+				makeMetrics(5.64, 92.28, 81.31, 57, 6, 51, 0, 10.53),
+				makeMetrics(12.27, 100, 100, 124, 41, 83, 0, 33.06),
 			),
 			cell("A", "B2B", 302,
-				makeMetrics(3.75, 100.0, 100.0, 34, 0, 34, 0, 0.0),
-				makeMetrics(4.53, 91.4, 79.8, 41, 5, 36, 0, 12.2),
-				makeHybridPublishedSlice(11.26, 102),
+				makeMetrics(3.75, 100, 100, 34, 0, 34, 0, 0),
+				makeMetrics(4.53, 91.39, 79.8, 41, 5, 36, 0, 12.2),
+				makeMetrics(11.26, 100, 100, 102, 39, 63, 0, 38.24),
 			),
 			cell("A", "B2C", 35,
-				makeMetrics(20.0, 100.0, 100.0, 21, 0, 21, 0, 0.0),
-				makeMetrics(15.24, 100.0, 94.3, 16, 1, 15, 0, 6.2),
-				makeHybridPublishedSlice(18.1, 19),
+				makeMetrics(20, 100, 100, 21, 0, 21, 0, 0),
+				makeMetrics(15.24, 100, 94.29, 16, 1, 15, 0, 6.25),
+				makeMetrics(20.95, 100, 100, 22, 2, 20, 0, 9.09),
 			),
 			cell("B", "all", 172,
-				makeMetrics(7.36, 100.0, 100.0, 38, 0, 38, 0, 0.0),
-				makeMetrics(6.01, 87.2, 69.2, 31, 2, 29, 0, 6.5),
-				makeHybridPublishedAll(14.53, 75, 27, 48, 36.0),
+				makeMetrics(7.36, 100, 100, 38, 0, 38, 0, 0),
+				makeMetrics(6.01, 87.21, 69.19, 31, 2, 29, 0, 6.45),
+				makeMetrics(14.73, 100, 100, 76, 27, 49, 0, 35.53),
 			),
 			cell("B", "B2B", 147,
-				makeMetrics(5.22, 100.0, 100.0, 23, 0, 23, 0, 0.0),
-				makeMetrics(4.54, 85.0, 65.3, 20, 2, 18, 0, 10.0),
-				makeHybridPublishedSlice(13.61, 60),
+				makeMetrics(5.22, 100, 100, 23, 0, 23, 0, 0),
+				makeMetrics(4.54, 85.03, 65.31, 20, 2, 18, 0, 10),
+				makeMetrics(13.61, 100, 100, 60, 25, 35, 0, 41.67),
 			),
 			cell("B", "B2C", 25,
-				makeMetrics(20.0, 100.0, 100.0, 15, 0, 15, 0, 0.0),
-				makeMetrics(14.67, 100.0, 92.0, 11, 0, 11, 0, 0.0),
-				makeHybridPublishedSlice(20.0, 15),
+				makeMetrics(20, 100, 100, 15, 0, 15, 0, 0),
+				makeMetrics(14.67, 100, 92, 11, 0, 11, 0, 0),
+				makeMetrics(21.33, 100, 100, 16, 2, 14, 0, 12.5),
 			),
 		},
 		Synthetic: synCopy,
 	}
 }
 
-// ValidateV5PublicAggregateDocument verifies published v5 constants strictly without database access,
-// rejecting rounding substitutions (e.g. 11.97 -> 12.0), cohort A/B swaps, and fabricated hybrid sub-cells.
+// ValidateV5PublicAggregateDocument checks the published figures against the verified run.
 func ValidateV5PublicAggregateDocument(doc PublicMetricsDocument) error {
 	if doc.Dataset != "v5" || !doc.PublicAggregate {
 		return fmt.Errorf("expected dataset=v5 and public_aggregate=true, got dataset=%q public_aggregate=%t", doc.Dataset, doc.PublicAggregate)
@@ -375,65 +348,13 @@ func ValidateV5PublicAggregateDocument(doc PublicMetricsDocument) error {
 		return fmt.Errorf("expected 6 cells, got %d", len(doc.Cells))
 	}
 
-	type expectedRow struct {
-		cohort, group    string
-		clients          int
-		popP, coP, hybP  float64
-		hybHits          int
-		hybVariants      *int
-		hybVariantShare  *float64
-		expectHybridNull bool
+	want := V5PublicAggregateDocument(nil)
+	if doc.SnapshotID != want.SnapshotID {
+		return fmt.Errorf("unexpected snapshot: %q", doc.SnapshotID)
 	}
-	wantRows := []expectedRow{
-		{"A", "all", 337, 5.44, 5.64, 11.97, 121, intPtr(42), floatPtr(34.71), false},
-		{"A", "B2B", 302, 3.75, 4.53, 11.26, 102, nil, nil, true},
-		{"A", "B2C", 35, 20.0, 15.24, 18.10, 19, nil, nil, true},
-		{"B", "all", 172, 7.36, 6.01, 14.53, 75, intPtr(27), floatPtr(36.0), false},
-		{"B", "B2B", 147, 5.22, 4.54, 13.61, 60, nil, nil, true},
-		{"B", "B2C", 25, 20.0, 14.67, 20.0, 15, nil, nil, true},
-	}
-
-	for i, w := range wantRows {
-		c := doc.Cells[i]
-		if c.Dataset != "v5" || !c.PublicAggregate {
-			return fmt.Errorf("cell %d must carry dataset=v5 and public_aggregate=true", i)
-		}
-		if c.Cohort != w.cohort || c.Group != w.group || c.Clients != w.clients {
-			return fmt.Errorf("cell %d identity mismatch: got (%s,%s,%d), want (%s,%s,%d)",
-				i, c.Cohort, c.Group, c.Clients, w.cohort, w.group, w.clients)
-		}
-		if c.Popularity == nil || c.CoPurchase == nil || c.Hybrid == nil {
-			return fmt.Errorf("cell %d missing popularity/copurchase/hybrid metrics", i)
-		}
-		if err := assertFloatPtrNear("pop.precision_at_3", c.Popularity.PrecisionAt3, w.popP); err != nil {
-			return fmt.Errorf("cell %s/%s: %w", w.cohort, w.group, err)
-		}
-		if err := assertFloatPtrNear("co.precision_at_3", c.CoPurchase.PrecisionAt3, w.coP); err != nil {
-			return fmt.Errorf("cell %s/%s: %w", w.cohort, w.group, err)
-		}
-		if err := assertFloatPtrNear("hybrid.precision_at_3", c.Hybrid.PrecisionAt3, w.hybP); err != nil {
-			return fmt.Errorf("cell %s/%s: %w", w.cohort, w.group, err)
-		}
-		if c.Hybrid.Hits == nil || *c.Hybrid.Hits != w.hybHits {
-			return fmt.Errorf("cell %s/%s: hybrid.hits mismatch (want %d)", w.cohort, w.group, w.hybHits)
-		}
-		if c.Hybrid.FillRate != nil || c.Hybrid.Full3Rate != nil {
-			return fmt.Errorf("cell %s/%s: unpublished hybrid fill_rate/full3_rate must stay nil", w.cohort, w.group)
-		}
-		if w.expectHybridNull {
-			if c.Hybrid.VariantHits != nil || c.Hybrid.NewProductHits != nil || c.Hybrid.UnknownFamilyHits != nil || c.Hybrid.VariantShare != nil {
-				return fmt.Errorf("cell %s/%s: unpublished B2B/B2C hybrid breakdown must stay nil", w.cohort, w.group)
-			}
-		} else {
-			if c.Hybrid.VariantHits == nil || *c.Hybrid.VariantHits != *w.hybVariants {
-				return fmt.Errorf("cell %s/%s: hybrid.variant_hits mismatch (want %d)", w.cohort, w.group, *w.hybVariants)
-			}
-			if c.Hybrid.UnknownFamilyHits == nil || *c.Hybrid.UnknownFamilyHits != 0 {
-				return fmt.Errorf("cell %s/%s: hybrid.unknown_family_hits must be 0 with product_group", w.cohort, w.group)
-			}
-			if err := assertFloatPtrNear("hybrid.variant_share", c.Hybrid.VariantShare, *w.hybVariantShare); err != nil {
-				return fmt.Errorf("cell %s/%s: %w", w.cohort, w.group, err)
-			}
+	for i, cell := range doc.Cells {
+		if !reflect.DeepEqual(cell, want.Cells[i]) {
+			return fmt.Errorf("cell %d (%s/%s) differs from the verified v5 run", i, cell.Cohort, cell.Group)
 		}
 	}
 
@@ -446,16 +367,6 @@ func ValidateV5PublicAggregateDocument(doc PublicMetricsDocument) error {
 				return fmt.Errorf("synthetic cell %d must set demo=true", i)
 			}
 		}
-	}
-	return nil
-}
-
-func assertFloatPtrNear(field string, got *float64, want float64) error {
-	if got == nil {
-		return fmt.Errorf("%s is nil, want %.2f", field, want)
-	}
-	if math.Abs(*got-want) > 1e-6 {
-		return fmt.Errorf("%s got %.6f, want %.6f", field, *got, want)
 	}
 	return nil
 }

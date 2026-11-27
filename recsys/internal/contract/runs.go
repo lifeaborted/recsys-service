@@ -2,10 +2,13 @@ package contract
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"recsys/internal/domain"
 )
+
+var ErrRunNotFound = errors.New("run or offer not found")
 
 // RunItemInput is one item of a stand "Новый run" request.
 type RunItemInput struct {
@@ -36,5 +39,5 @@ type RunRecord struct {
 type RunsStore interface {
 	CreateRun(ctx context.Context, clientID domain.ClientID, modelVersion string, items []RunItemInput) (RunRecord, error)
 	ListRuns(ctx context.Context, clientID domain.ClientID, limit int) ([]RunRecord, error)
-	CreateEvent(ctx context.Context, runID int64, offerID, eventType string) error
+	CreateEvent(ctx context.Context, clientID domain.ClientID, runID int64, offerID, eventType string) error
 }

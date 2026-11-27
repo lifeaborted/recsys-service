@@ -37,13 +37,14 @@ func (s *Store) ProductDetail(ctx context.Context, itemID string) (contract.Prod
 		       o.parameters
 		FROM recommendations.item_feature_versions f
 		JOIN recommendations.model_snapshots m
-		  ON m.feature_version = f.feature_version AND m.is_active
+		  ON m.feature_version = f.feature_version
+		  AND (($2 = '' AND m.is_active) OR m.snapshot_id = NULLIF($2, ''))
 		JOIN recommendations.catalog_offers o ON o.offer_id = f.offer_id
 		LEFT JOIN recommendations.catalog_categories c ON c.category_id = o.category_id
 		LEFT JOIN recommendations.catalog_vendors v ON v.vendor_id = o.vendor_id
 		WHERE f.item_id = $1
 		LIMIT 1
-	`, itemID).Scan(
+	`, itemID, s.onlineSnapshot).Scan(
 		&out.ItemID, &out.OfferID, &out.SKU, &out.Title, &out.Category, &out.Vendor,
 		&out.Price, &out.OldPrice, &out.CurrencyCode, &out.Available, &out.URL,
 		&out.Description, &out.PictureURL, &out.VendorURL, &out.Delivery, &out.Pickup,

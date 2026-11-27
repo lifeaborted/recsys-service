@@ -173,7 +173,7 @@ export function DemoProductPage() {
                   <td>{item.category || "—"}</td>
                   <td>{item.subtitle || "—"}</td>
                   <td style={{ textAlign: "right" }}>{formatPrice(item.price, item.currency)}</td>
-                  <td>{item.offer_id ? "в каталоге" : "—"}</td>
+                  <td>{item.available == null ? "—" : item.available ? "в наличии" : "нет в наличии"}</td>
                   <td>
                     <button className="clone-link-btn" type="button" onClick={() => openScore(item.item_id)}>
                       График score

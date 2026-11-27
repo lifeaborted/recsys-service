@@ -56,6 +56,8 @@ func (s *Server) recommendationsFor(w http.ResponseWriter, r *http.Request, clie
 	})
 	if err != nil {
 		switch status.Code(err) {
+		case codes.NotFound:
+			respond.Error(w, r, http.StatusNotFound, "recommendation_not_found", "Recommendation profile or snapshot not found")
 		case codes.Unavailable:
 			respond.Error(w, r, http.StatusServiceUnavailable, "model_unavailable", "Recommendation service unavailable")
 		case codes.DeadlineExceeded:

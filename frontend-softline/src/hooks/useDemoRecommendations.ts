@@ -24,7 +24,9 @@ export function useDemoRecommendations(enabled = true) {
       .catch((cause: unknown) => {
         if (controller.signal.aborted) return;
         if (cause instanceof ApiError && cause.status === 401 && token) logout();
-        else setError(cause instanceof Error ? cause.message : "Не удалось получить рекомендации");
+        else if (cause instanceof ApiError && cause.requestId !== "unknown") {
+          setError(cause.message + " · Запрос " + cause.requestId);
+        } else setError(cause instanceof Error ? cause.message : "Не удалось получить рекомендации");
       })
       .finally(() => { if (!controller.signal.aborted) setPending(false); });
     return () => controller.abort();

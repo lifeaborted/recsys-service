@@ -260,6 +260,10 @@ paths:
   /runs:
     get:
       operationId: listRuns
+      parameters:
+        - name: limit
+          in: query
+          schema: {type: integer, minimum: 1, maximum: 100, default: 10}
       responses:
         '200':
           description: Recent stand runs for the session profile
@@ -328,6 +332,12 @@ paths:
                 $ref: '#/components/schemas/Error'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Run or offer not found for this profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /purchases:
     post:
       operationId: createPurchase

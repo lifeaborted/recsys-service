@@ -2,7 +2,9 @@ package transporthttp
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
+	"strconv"
 
 	"recsys/internal/auth"
 	"recsys/internal/contract"
@@ -63,7 +65,16 @@ func (s *Server) handleGetRuns(w http.ResponseWriter, r *http.Request) {
 		respond.Error(w, r, http.StatusUnauthorized, "unauthorized", "Missing or invalid session")
 		return
 	}
-	runs, err := s.runs.ListRuns(r.Context(), profile.ClientID, 10)
+	limit := 10
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		var err error
+		limit, err = strconv.Atoi(raw)
+		if err != nil || limit < 1 || limit > 100 {
+			respond.Error(w, r, http.StatusBadRequest, "invalid_limit", "limit must be between 1 and 100")
+			return
+		}
+	}
+	runs, err := s.runs.ListRuns(r.Context(), profile.ClientID, limit)
 	if err != nil {
 		respond.Error(w, r, http.StatusInternalServerError, "runs_failed", "Failed to read runs")
 		return
@@ -89,7 +100,12 @@ func (s *Server) handlePostEvents(w http.ResponseWriter, r *http.Request) {
 		respond.Error(w, r, http.StatusBadRequest, "invalid_input", "run_id, offer_id and click/purchase are required")
 		return
 	}
-	if err := s.runs.CreateEvent(r.Context(), body.RunID, body.OfferID, body.EventType); err != nil {
+	profile, _ := auth.Current(r.Context())
+	if err := s.runs.CreateEvent(r.Context(), profile.ClientID, body.RunID, body.OfferID, body.EventType); err != nil {
+		if errors.Is(err, contract.ErrRunNotFound) {
+			respond.Error(w, r, http.StatusNotFound, "run_not_found", "Run or offer not found")
+			return
+		}
 		respond.Error(w, r, http.StatusInternalServerError, "event_failed", "Failed to record event")
 		return
 	}

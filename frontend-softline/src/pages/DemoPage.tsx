@@ -76,6 +76,12 @@ function AdminDiagnostics({ token }: { token: string }) {
           </details>
         </>
       )}
+      <details>
+        <summary>Открытый источник: сравнение тарифов Microsoft 365</summary>
+        <p>Business Standard включает настольные приложения. Business Basic предлагает веб- и мобильные версии. Для клиента, которому нужны настольные приложения, это проверяемое основание рассмотреть переход на Standard.</p>
+        <p>Qwen предложила связь «дополнение». Проверка источника подтвердила разницу функций, поэтому предложение о дополнении осталось на проверке.</p>
+        <a href="https://www.microsoft.com/en/microsoft-365/business/with-teams-plans-and-pricing" target="_blank" rel="noreferrer">Таблица сравнения Microsoft</a>
+      </details>
       <DemoMetricsPanel />
       {graph ? <DemoGraphModal {...graph} onClose={() => setGraph(null)} /> : null}
     </>

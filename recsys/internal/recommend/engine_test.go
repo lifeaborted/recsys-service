@@ -322,6 +322,34 @@ func TestOnlineRerankReordersOnlyTheShortlist(t *testing.T) {
 	}
 }
 
+func TestOnlineRerankRunsOnceAfterPoolExpansion(t *testing.T) {
+	m := &memory{
+		client:   domain.Client{ID: "u", Group: domain.B2B},
+		cutoff:   time.Date(2026, 8, 31, 0, 0, 0, 0, time.UTC),
+		sets:     map[contract.CandidateKey][]domain.Candidate{},
+		products: map[domain.ItemID]Product{},
+	}
+	for i := 0; i < 65; i++ {
+		id := domain.ItemID(fmt.Sprintf("item-%02d", i))
+		m.products[id] = Product{Title: string(id), Available: i < 2 || i == 64, OfferID: offerID(string(id))}
+		m.add(contract.CandidateKey{Signal: "catalog"}, id)
+	}
+	calls := 0
+	engine := New(m)
+	engine.UseReranker(orderFunc(func(_ context.Context, _ []string, items []RerankItem) ([]domain.ItemID, error) {
+		calls++
+		got := make([]domain.ItemID, len(items))
+		for i, item := range items {
+			got[i] = item.ID
+		}
+		return got, nil
+	}))
+	result, err := engine.Recommend(context.Background(), contract.RecommendationQuery{ClientID: "u", Mode: contract.Online, Limit: 3})
+	if err != nil || len(result.Items) != 3 || calls != 1 {
+		t.Fatalf("result has %d items, %d reranks: %v", len(result.Items), calls, err)
+	}
+}
+
 func TestOnlineHidesRenewalAndKeepsUpgrade(t *testing.T) {
 	base := domain.ItemID("base")
 	renew, upgrade := domain.ItemID("renew"), domain.ItemID("upgrade")

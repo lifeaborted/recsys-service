@@ -112,11 +112,43 @@ func (s *Store) AccountByLogin(ctx context.Context, login string) (auth.AccountR
 
 // CreateSession stores a SHA-256 session token digest with explicit creation and expiration timestamps.
 func (s *Store) CreateSession(ctx context.Context, tokenHash []byte, accountID int64, createdAt, expiresAt time.Time) error {
-	_, err := s.pool.Exec(ctx, `
-		INSERT INTO recommendations.stand_sessions (token_hash, account_id, created_at, expires_at)
-		VALUES ($1, $2, $3, $4)
-	`, tokenHash, accountID, createdAt.UTC(), expiresAt.UTC())
-	return err
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	var isolatedClient, template string
+	err = tx.QueryRow(ctx, `
+		INSERT INTO recommendations.clients (excel_row, client_id, client_group, client_type, industry, lk_access)
+		SELECT nextval('recommendations.stand_client_excel_row_seq'),
+		       a.client_id || '-SESSION-' || encode($2::bytea, 'hex'),
+		       c.client_group, c.client_type, c.industry, c.lk_access
+		FROM recommendations.stand_accounts a
+		JOIN recommendations.clients c ON c.client_id = a.client_id
+		WHERE a.account_id = $1
+		  AND a.client_id IN ('DEMO-NOTVER', 'DEMO-VERB2B', 'DEMO-VERB2C')
+		  AND EXISTS (SELECT 1 FROM recommendations.model_snapshots WHERE snapshot_id = 'demo-v1')
+		  AND NOT EXISTS (SELECT 1 FROM recommendations.model_snapshots WHERE snapshot_id <> 'demo-v1')
+		  AND NOT EXISTS (SELECT 1 FROM recommendations.sales)
+		RETURNING client_id, split_part(client_id, '-SESSION-', 1)
+	`, accountID, tokenHash).Scan(&isolatedClient, &template)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return err
+	}
+	seedItem := map[string]string{"DEMO-VERB2B": "DEMO-BASE", "DEMO-VERB2C": "DEMO-B2C-1"}[template]
+	if seedItem != "" {
+		if _, err := createPurchase(ctx, tx, domain.ClientID(isolatedClient), seedItem, createdAt); err != nil {
+			return fmt.Errorf("seed preview history: %w", err)
+		}
+	}
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO recommendations.stand_sessions (token_hash, account_id, created_at, expires_at, client_id)
+		VALUES ($1, $2, $3, $4, NULLIF($5, ''))
+	`, tokenHash, accountID, createdAt.UTC(), expiresAt.UTC(), isolatedClient); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 // SessionByTokenHash looks up a session and its bound stand profile by token SHA-256 digest.
@@ -125,11 +157,11 @@ func (s *Store) SessionByTokenHash(ctx context.Context, tokenHash []byte) (auth.
 	var clientID, group string
 	err := s.pool.QueryRow(ctx, `
 		SELECT s.account_id, s.created_at, s.expires_at,
-		       a.profile_id, a.client_id, a.login,
+		       a.profile_id, COALESCE(s.client_id, a.client_id), a.login,
 		       COALESCE(c.client_group, 'B2B'), c.industry, a.role
 		FROM recommendations.stand_sessions s
 		JOIN recommendations.stand_accounts a ON a.account_id = s.account_id
-		JOIN recommendations.clients c ON c.client_id = a.client_id
+		JOIN recommendations.clients c ON c.client_id = COALESCE(s.client_id, a.client_id)
 		WHERE s.token_hash = $1
 	`, tokenHash).Scan(
 		&rec.AccountID, &rec.CreatedAt, &rec.ExpiresAt,
@@ -294,6 +326,23 @@ type PurchaseRecord struct {
 
 // CreatePurchase records an online purchase for clientID under its canonical item_id.
 func (s *Store) CreatePurchase(ctx context.Context, clientID domain.ClientID, rawItemID string, now time.Time) (PurchaseRecord, error) {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return PurchaseRecord{}, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	record, err := createPurchase(ctx, tx, clientID, rawItemID, now)
+	if err != nil {
+		return PurchaseRecord{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return PurchaseRecord{}, err
+	}
+	return record, nil
+}
+
+func createPurchase(ctx context.Context, tx pgx.Tx, clientID domain.ClientID, rawItemID string, now time.Time) (PurchaseRecord, error) {
 	target := strings.TrimSpace(rawItemID)
 	if target == "" {
 		return PurchaseRecord{}, ErrItemNotFound
@@ -302,18 +351,12 @@ func (s *Store) CreatePurchase(ctx context.Context, clientID domain.ClientID, ra
 		now = time.Now().UTC()
 	}
 
-	tx, err := s.pool.Begin(ctx)
-	if err != nil {
-		return PurchaseRecord{}, err
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
 	// Resolve canonical item_id and optional offer metadata.
 	var canonItemID string
 	var offerID, sku, itemName, currency *string
 	var price *float64
 
-	err = tx.QueryRow(ctx, `
+	err := tx.QueryRow(ctx, `
 		SELECT
 			hi.item_id,
 			o.offer_id,
@@ -423,9 +466,6 @@ func (s *Store) CreatePurchase(ctx context.Context, clientID domain.ClientID, ra
 		return PurchaseRecord{}, fmt.Errorf("insert online_purchase: %w", err)
 	}
 
-	if err := tx.Commit(ctx); err != nil {
-		return PurchaseRecord{}, err
-	}
 	return PurchaseRecord{
 		OrderID: orderID,
 		ItemID:  domain.ItemID(canonItemID),

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, type FormEvent, type MouseEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent, type ReactNode } from "react";
 import { HEADER_HTML, SIDEBAR_HTML } from "../data/chrome";
 import { useCloneUi } from "../hooks/useCloneUi";
 import type { RouteKey } from "../lib/routes";
@@ -20,6 +20,12 @@ function portalChrome(html: string, profile: SessionProfile) {
       if (node.textContent?.trim() === slot) node.textContent = value;
     }
   }
+
+  const orders = document.querySelector('.b-store-header__dropdown-header')?.closest("ul")?.querySelector('a[href="#/invoices"]');
+  orders?.setAttribute("href", "#/orders");
+  const menu = document.querySelector(".b-store-header__menu-btn");
+  menu?.setAttribute("aria-controls", "portal-sidebar");
+  menu?.setAttribute("aria-expanded", "false");
 
   const nav = document.querySelector(".sidebar__window_main .nav-list");
   const adminItem = nav?.querySelector('a[href="#/recommendations"]')?.closest("li");
@@ -55,6 +61,7 @@ interface AppShellProps {
 
 export function AppShell({ route, profile, children }: AppShellProps) {
   const { logout } = useSession();
+  const [menuOpen, setMenuOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const header = useMemo(() => portalChrome(HEADER_HTML, profile), [profile]);
   const sidebar = useMemo(() => portalChrome(SIDEBAR_HTML, profile), [profile]);
@@ -74,9 +81,20 @@ export function AppShell({ route, profile, children }: AppShellProps) {
     });
   }, [route]);
 
+  useEffect(() => {
+    rootRef.current?.querySelector(".b-store-header__menu-btn")?.setAttribute("aria-expanded", String(menuOpen));
+  }, [menuOpen]);
+
   function onClick(event: MouseEvent<HTMLDivElement>) {
     const target = event.target;
-    if (!(target instanceof Element) || !target.closest("[data-portal-logout]")) return;
+    if (!(target instanceof Element)) return;
+    const toggle = target.closest(".b-store-header__menu-btn");
+    if (toggle) {
+      setMenuOpen((open) => !open);
+      return;
+    }
+    if (target.closest(".portal-sidebar-drawer a")) setMenuOpen(false);
+    if (!target.closest("[data-portal-logout]")) return;
     event.preventDefault();
     logout();
     window.location.hash = "#/overview";
@@ -98,6 +116,7 @@ export function AppShell({ route, profile, children }: AppShellProps) {
           <a href="#/profile">{profile.login} · {profileStatus(profile)}</a>
           {profile.role === "admin" && <a href="#/recommendations">Отладка рекомендаций</a>}
         </div>
+        {menuOpen && <div className="portal-sidebar-drawer" id="portal-sidebar"><Fragment html={sidebar} /></div>}
         <div className="layout main-container">
           <div className="mobile-hidden react-sidebar-slot">
             <Fragment html={sidebar} />

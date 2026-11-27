@@ -59,22 +59,22 @@ ORDER BY offer_id`)
 	return offers, rows.Err()
 }
 
-// EmbeddedOffers returns offer ids already stored for one model.
-func (s *Store) EmbeddedOffers(ctx context.Context, model string) (map[string]struct{}, int, error) {
+// EmbeddedOffers returns the stored input digest for each offer of one model.
+func (s *Store) EmbeddedOffers(ctx context.Context, model string) (map[string]string, int, error) {
 	rows, err := s.pool.Query(ctx, `
-SELECT offer_id, vector_dims(embedding)
+SELECT offer_id, vector_dims(embedding), text_sha256
 FROM recommendations.catalog_offer_embeddings
 WHERE model_version = $1`, model)
 	if err != nil {
 		return nil, 0, err
 	}
 	defer rows.Close()
-	seen := map[string]struct{}{}
+	seen := map[string]string{}
 	dimensions := 0
 	for rows.Next() {
-		var id string
+		var id, digest string
 		var dims int
-		if err := rows.Scan(&id, &dims); err != nil {
+		if err := rows.Scan(&id, &dims, &digest); err != nil {
 			return nil, 0, err
 		}
 		if dimensions == 0 {
@@ -82,7 +82,7 @@ WHERE model_version = $1`, model)
 		} else if dims != dimensions {
 			return nil, 0, fmt.Errorf("stored embeddings have mixed dimensions")
 		}
-		seen[id] = struct{}{}
+		seen[id] = digest
 	}
 	return seen, dimensions, rows.Err()
 }
@@ -126,12 +126,18 @@ func (s *Store) NearestOffers(ctx context.Context, model string, vector []float6
 	if limit < 1 {
 		return nil, nil
 	}
-	rows, err := s.pool.Query(ctx, `
-SELECT offer_id, 1 - (embedding <=> $1::public.vector) AS score
+	dimensions := len(vector)
+	distance := "embedding OPERATOR(public.<=>) $1::public.vector"
+	if dimensions > 0 && dimensions <= 4000 {
+		distance = fmt.Sprintf("embedding::public.halfvec(%[1]d) OPERATOR(public.<=>) $1::public.halfvec(%[1]d)", dimensions)
+	}
+	query := fmt.Sprintf(`
+SELECT offer_id, 1 - (embedding OPERATOR(public.<=>) $1::public.vector)
 FROM recommendations.catalog_offer_embeddings
-WHERE model_version = $2
-ORDER BY embedding <=> $1::public.vector
-LIMIT $3`, vectorLiteral(vector), model, limit)
+WHERE model_version = $2 AND public.vector_dims(embedding) = %d
+ORDER BY %s
+LIMIT $3 `, dimensions, distance)
+	rows, err := s.pool.Query(ctx, query, vectorLiteral(vector), model, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -153,23 +159,30 @@ LIMIT $3`, vectorLiteral(vector), model, limit)
 	return hits, rows.Err()
 }
 
-// IndexOfferEmbeddings pins the column to the stored dimension and builds a cosine index.
-func (s *Store) IndexOfferEmbeddings(ctx context.Context) error {
-	var dims int
-	if err := s.pool.QueryRow(ctx, `
-SELECT vector_dims(embedding) FROM recommendations.catalog_offer_embeddings LIMIT 1`).Scan(&dims); err != nil {
+// IndexOfferEmbeddings maintains one HNSW expression index for the model's dimensions.
+func (s *Store) IndexOfferEmbeddings(ctx context.Context, model string) error {
+	dims, err := s.embeddingDimension(ctx, model)
+	if err != nil {
 		return err
 	}
-	if dims < 1 {
-		return fmt.Errorf("stored embedding has no dimensions")
+	if dims < 1 || dims > 4000 {
+		return fmt.Errorf("cannot build a halfvec HNSW index for %d dimensions", dims)
 	}
-	_, err := s.pool.Exec(ctx, fmt.Sprintf(`
-ALTER TABLE recommendations.catalog_offer_embeddings
-    ALTER COLUMN embedding TYPE public.vector(%d);
-CREATE INDEX IF NOT EXISTS catalog_offer_embeddings_cosine
+	_, err = s.pool.Exec(ctx, fmt.Sprintf(`
+CREATE INDEX IF NOT EXISTS catalog_offer_embeddings_cosine_half_%[1]d
     ON recommendations.catalog_offer_embeddings
-    USING hnsw (embedding vector_cosine_ops)`, dims))
+    USING hnsw ((embedding::public.halfvec(%[1]d)) public.halfvec_cosine_ops)
+    WHERE public.vector_dims(embedding) = %[1]d `, dims))
 	return err
+}
+
+func (s *Store) embeddingDimension(ctx context.Context, model string) (int, error) {
+	var dims int
+	err := s.pool.QueryRow(ctx, `
+SELECT COALESCE((SELECT public.vector_dims(embedding)
+	FROM recommendations.catalog_offer_embeddings WHERE model_version = $1 LIMIT 1), 0)
+`, model).Scan(&dims)
+	return dims, err
 }
 
 func vectorLiteral(vector []float64) string {

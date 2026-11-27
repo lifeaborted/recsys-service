@@ -26,6 +26,7 @@ function hybridVariants(cohort: typeof cohorts[number]) {
 
 export const demoMetrics = {
   ...fallback,
+  hybridCoverage: published.cells.map(({ cohort, group, hybrid }) => ({ cohort, group, ...hybrid })),
   baseline_cutoff: published.train_through,
   precision_at_3: fallback.precision_at_3.map((row) => {
     const method = row.method as keyof typeof methodKeys;

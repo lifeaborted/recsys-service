@@ -79,12 +79,6 @@ export function useCloneUi(rootRef: RefObject<HTMLElement | null>, routeKey: str
     document.addEventListener("click", onDocumentClick);
     cleanups.push(() => document.removeEventListener("click", onDocumentClick));
 
-    const menuButton = root.querySelector<HTMLElement>(".b-store-header__menu-btn");
-    const middle = root.querySelector<HTMLElement>(".b-store-header__middle");
-    const onMenu = () => middle?.classList.toggle("is-open");
-    menuButton?.addEventListener("click", onMenu);
-    cleanups.push(() => menuButton?.removeEventListener("click", onMenu));
-
     return () => cleanups.forEach((cleanup) => cleanup());
   }, [rootRef, routeKey]);
 }

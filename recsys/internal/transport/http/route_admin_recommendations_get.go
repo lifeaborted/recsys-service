@@ -1,6 +1,7 @@
 package transporthttp
 
 import (
+	"context"
 	"net/http"
 	"time"
 
@@ -34,6 +35,17 @@ func (s *Server) handleGetAdminRecommendations(w http.ResponseWriter, r *http.Re
 	if clientID == "" {
 		respond.Error(w, r, http.StatusBadRequest, "invalid_target", "Unknown preview profile")
 		return
+	}
+
+	if store, ok := s.stats.(interface {
+		LatestPreviewClient(context.Context, domain.ClientID) (domain.ClientID, error)
+	}); ok && target != "guest" && target != "admin" {
+		var err error
+		clientID, err = store.LatestPreviewClient(r.Context(), clientID)
+		if err != nil {
+			respond.Error(w, r, http.StatusInternalServerError, "profile_failed", "Failed to read preview profile")
+			return
+		}
 	}
 
 	start := time.Now()

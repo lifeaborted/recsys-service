@@ -47,10 +47,11 @@ func (s *Store) CreateRun(
 				SELECT f.offer_id
 				FROM recommendations.item_feature_versions f
 				JOIN recommendations.model_snapshots m
-				  ON m.feature_version = f.feature_version AND m.is_active
+				  ON m.feature_version = f.feature_version
+				  AND (($2 = '' AND m.is_active) OR m.snapshot_id = NULLIF($2, ''))
 				WHERE f.item_id = $1
 				LIMIT 1
-			`, item.ItemID).Scan(&offerID); err != nil {
+			`, item.ItemID, s.onlineSnapshot).Scan(&offerID); err != nil {
 				if err == pgx.ErrNoRows {
 					continue
 				}
@@ -148,13 +149,20 @@ func (s *Store) ListRuns(ctx context.Context, clientID domain.ClientID, limit in
 }
 
 // CreateEvent records a click or purchase for a stand run.
-func (s *Store) CreateEvent(ctx context.Context, runID int64, offerID, eventType string) error {
-	_, err := s.pool.Exec(ctx, `
+func (s *Store) CreateEvent(ctx context.Context, clientID domain.ClientID, runID int64, offerID, eventType string) error {
+	tag, err := s.pool.Exec(ctx, `
 		INSERT INTO recommendations.recommendation_events (run_id, offer_id, event_type)
-		VALUES ($1, $2, $3)
-	`, runID, offerID, eventType)
+		SELECT run.run_id, $2, $3
+		FROM recommendations.recommendation_runs run
+		WHERE run.run_id = $1 AND run.client_id = $4
+		  AND EXISTS (SELECT 1 FROM recommendations.recommendation_items item
+		              WHERE item.run_id = run.run_id AND item.offer_id = $2)
+	`, runID, offerID, eventType, string(clientID))
 	if err != nil {
 		return fmt.Errorf("insert event: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return contract.ErrRunNotFound
 	}
 	return nil
 }

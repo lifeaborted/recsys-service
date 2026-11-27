@@ -6,6 +6,10 @@ services:
       context: .
     environment:
       DATABASE_URL: "${DATABASE_URL:-}"
+      RECSYS_ONLINE_SNAPSHOT: "${RECSYS_ONLINE_SNAPSHOT:-}"
+      EMBED_MODEL: "${EMBED_MODEL:-}"
+      LLM_BASE_URL: "${LLM_BASE_URL:-}"
+      LLM_MODEL: "${LLM_MODEL:-}"
       RECSYS_GRPC_ADDR: "0.0.0.0:50051"
       RECSYS_GRPC_ALLOW_INSECURE: "1"
     ports:

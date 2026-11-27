@@ -22,7 +22,7 @@ func displayScore(score float64) float64 {
 	return score / (1 + score)
 }
 
-func render(snapshot string, mode contract.Mode, ordered []ranked, cards map[domain.ItemID]Product, limit int) contract.RecommendationResult {
+func render(snapshot string, mode contract.Mode, ordered []ranked, cards, owned map[domain.ItemID]Product, limit int) contract.RecommendationResult {
 	if limit <= 0 {
 		limit = 3
 	}
@@ -88,8 +88,11 @@ func render(snapshot string, mode contract.Mode, ordered []ranked, cards map[dom
 				kind, label := "cohort", id
 				if raw, ok := strings.CutPrefix(id, "item:"); ok {
 					kind, label = "product", raw
-					if t := cards[domain.ItemID(raw)].Title; t != "" {
-						label = t
+					itemID := domain.ItemID(raw)
+					if title := cards[itemID].Title; title != "" {
+						label = title
+					} else if title := owned[itemID].Title; title != "" {
+						label = title
 					}
 				}
 				out.Graph.Nodes = append(out.Graph.Nodes, domain.Node{ID: id, Type: kind, Label: label})

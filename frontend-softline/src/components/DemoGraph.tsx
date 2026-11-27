@@ -17,6 +17,7 @@ const ROW_HEIGHT = 96;
 const TYPE_LABELS: Record<string, string> = {
   transition: "переход",
   basket: "совместная покупка",
+  similarity: "семантическая близость",
   jaccard: "похожие товары",
   popularity: "популярное",
   catalog: "каталог",

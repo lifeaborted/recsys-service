@@ -103,6 +103,10 @@ func (a pgTransportAdapter) CreatePurchase(ctx context.Context, clientID domain.
 	}, nil
 }
 
+func (a pgTransportAdapter) LatestPreviewClient(ctx context.Context, template domain.ClientID) (domain.ClientID, error) {
+	return a.store.LatestPreviewClient(ctx, template)
+}
+
 type mockRunsStore struct {
 	mu     sync.Mutex
 	nextID int64
@@ -129,29 +133,37 @@ func (m *mockRunsStore) CreateRun(_ context.Context, clientID domain.ClientID, m
 	return run, nil
 }
 
-func (m *mockRunsStore) ListRuns(_ context.Context, _ domain.ClientID, limit int) ([]contract.RunRecord, error) {
+func (m *mockRunsStore) ListRuns(_ context.Context, clientID domain.ClientID, limit int) ([]contract.RunRecord, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if limit > len(m.runs) {
-		limit = len(m.runs)
+	result := []contract.RunRecord{}
+	for _, run := range m.runs {
+		if run.ClientID == string(clientID) && len(result) < limit {
+			result = append(result, run)
+		}
 	}
-	return append([]contract.RunRecord(nil), m.runs[:limit]...), nil
+	return result, nil
 }
 
-func (m *mockRunsStore) CreateEvent(_ context.Context, runID int64, _ string, eventType string) error {
+func (m *mockRunsStore) CreateEvent(_ context.Context, clientID domain.ClientID, runID int64, offerID string, eventType string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for i := range m.runs {
-		if m.runs[i].RunID != runID {
+		if m.runs[i].RunID != runID || m.runs[i].ClientID != string(clientID) {
 			continue
 		}
-		if eventType == "click" {
-			m.runs[i].Clicks++
-		} else {
-			m.runs[i].Purchases++
+		for _, item := range m.runs[i].Items {
+			if item.OfferID == offerID {
+				if eventType == "click" {
+					m.runs[i].Clicks++
+				} else {
+					m.runs[i].Purchases++
+				}
+				return nil
+			}
 		}
 	}
-	return nil
+	return contract.ErrRunNotFound
 }
 
 type mockBackend struct {

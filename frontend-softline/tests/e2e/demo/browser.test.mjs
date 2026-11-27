@@ -171,6 +171,11 @@ test("главная для гостя, три статуса и закрыта�
   await page.getByRole("dialog").waitFor();
   await page.keyboard.press("Escape");
 
+  await page.setViewportSize({ width: 1024, height: 844 });
+  await page.locator(".b-store-header__menu-btn").click();
+  await page.locator(".portal-sidebar-drawer").getByRole("link", { name: "Отладка рекомендаций" }).waitFor();
+  await page.locator(".b-store-header__menu-btn").click();
+
   await page.setViewportSize({ width: 390, height: 844 });
   const mobile = page.locator(".portal-account-mobile");
   await mobile.getByRole("link", { name: "Отладка рекомендаций" }).waitFor();

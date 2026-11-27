@@ -10,9 +10,10 @@ import (
 
 // RerankItem is a card the cascade already accepted. The model may only reorder these ids.
 type RerankItem struct {
-	ID    domain.ItemID
-	Title string
-	Kind  domain.RecommendationKind
+	Signal string `json:"signal"`
+	ID     domain.ItemID
+	Title  string
+	Kind   domain.RecommendationKind
 }
 
 // Reranker reorders the online shortlist. A failure leaves the cascade order in place.
@@ -30,7 +31,7 @@ func rerankOnline(ctx context.Context, reranker Reranker, ordered []ranked, card
 	}
 	items := make([]RerankItem, len(head))
 	for i, row := range head {
-		items[i] = RerankItem{ID: row.id, Title: cards[row.id].Title, Kind: row.kind}
+		items[i] = RerankItem{ID: row.id, Title: cards[row.id].Title, Kind: row.kind, Signal: row.proof[0].Type}
 	}
 	ids, err := reranker.Order(ctx, ownedTitles(owned), items)
 	if err != nil || len(ids) != len(head) {

@@ -120,6 +120,12 @@ func (e *Engine) Recommend(ctx context.Context, q contract.RecommendationQuery) 
 	best := map[domain.ItemID]ranked{}
 	cards := map[domain.ItemID]Product{}
 	owned := slices.Clone(ids)
+	finish := func(ordered []ranked) contract.RecommendationResult {
+		if q.Mode == contract.Online {
+			ordered = rerankOnline(ctx, e.reranker, ordered, cards, products)
+		}
+		return render(s.ID, q.Mode, ordered, cards, products, want)
+	}
 	similarSeen := false
 	for poolLimit := 64; ; poolLimit *= 2 {
 		if err := ctx.Err(); err != nil {
@@ -189,13 +195,10 @@ func (e *Engine) Recommend(ctx context.Context, q contract.RecommendationQuery) 
 			ordered = append(ordered, r)
 		}
 		slices.SortFunc(ordered, compare)
-		if q.Mode == contract.Online {
-			ordered = rerankOnline(ctx, e.reranker, ordered, cards, products)
-		}
-		result := render(s.ID, q.Mode, ordered, cards, want)
 		if len(more) == 0 {
-			return result, nil
+			return finish(ordered), nil
 		}
+		result := render(s.ID, q.Mode, ordered, cards, products, want)
 		// A truncated higher-priority pool may still displace a fallback card.
 		if len(result.Items) == want {
 			lastTier := best[result.Items[want-1].ItemID].tier
@@ -206,7 +209,7 @@ func (e *Engine) Recommend(ctx context.Context, q contract.RecommendationQuery) 
 				}
 			}
 			if len(active) == 0 {
-				return result, nil
+				return finish(ordered), nil
 			}
 		} else {
 			active = more

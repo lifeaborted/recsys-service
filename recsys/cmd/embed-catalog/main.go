@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"strings"
 	"time"
 
 	"recsys/internal/explain"
@@ -73,7 +74,7 @@ func run(ctx context.Context, args []string, diagnostics io.Writer) error {
 	}
 	pending := make([]postgres.OfferName, 0, len(offers))
 	for _, offer := range offers {
-		if _, ok := stored[offer.ID]; !ok {
+		if stored[offer.ID] != explain.InputHash(strings.TrimSpace(offer.Name)) {
 			pending = append(pending, offer)
 		}
 	}
@@ -112,7 +113,7 @@ func run(ctx context.Context, args []string, diagnostics io.Writer) error {
 		fmt.Fprintf(diagnostics, "embedded %d/%d\n", written, len(pending))
 	}
 	if written > 0 || len(stored) > 0 {
-		if err := target.IndexOfferEmbeddings(ctx); err != nil {
+		if err := target.IndexOfferEmbeddings(ctx, model); err != nil {
 			fmt.Fprintf(diagnostics, "index skipped: %v\n", err)
 		}
 	}

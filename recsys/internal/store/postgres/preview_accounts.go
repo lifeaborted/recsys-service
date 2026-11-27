@@ -2,9 +2,13 @@ package postgres
 
 import (
 	"context"
+	"errors"
+
 	"fmt"
+	"github.com/jackc/pgx/v5"
 
 	"recsys/internal/auth"
+	"recsys/internal/domain"
 )
 
 // ConfigurePreviewAccounts rotates the test credentials exclusively on a synthetic stand.
@@ -88,4 +92,21 @@ RETURNING account_id
 		}
 	}
 	return tx.Commit(ctx)
+}
+
+// LatestPreviewClient selects the latest active isolated profile for administrator diagnostics.
+func (s *Store) LatestPreviewClient(ctx context.Context, template domain.ClientID) (domain.ClientID, error) {
+	var clientID domain.ClientID
+	err := s.pool.QueryRow(ctx, `
+		SELECT session.client_id
+		FROM recommendations.stand_sessions session
+		JOIN recommendations.stand_accounts account USING (account_id)
+		WHERE account.client_id = $1 AND session.client_id IS NOT NULL AND session.expires_at > now()
+		ORDER BY session.created_at DESC, session.client_id
+		LIMIT 1
+	`, template).Scan(&clientID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return template, nil
+	}
+	return clientID, err
 }

@@ -47,12 +47,12 @@ func TestV5PublicAggregateConstants(t *testing.T) {
 		t.Fatalf("public-metrics.json must include synthetic section with demo=true")
 	}
 
-	t.Run("RejectRounding1197To12", func(t *testing.T) {
+	t.Run("RejectRounding1227To12", func(t *testing.T) {
 		mutated := V5PublicAggregateDocument(&syn)
 		v := 12.0
 		mutated.Cells[0].Hybrid.PrecisionAt3 = &v
 		if err := ValidateV5PublicAggregateDocument(mutated); err == nil {
-			t.Fatalf("expected validation error when hybrid A Precision@3 11.97 is replaced with 12.0")
+			t.Fatalf("expected validation error when hybrid A Precision@3 12.27 is replaced with 12.0")
 		}
 	})
 
@@ -64,12 +64,12 @@ func TestV5PublicAggregateConstants(t *testing.T) {
 		}
 	})
 
-	t.Run("RejectV4ZeroesOrFabricatedHybridSubcell", func(t *testing.T) {
+	t.Run("RejectFabricatedHybridSubcell", func(t *testing.T) {
 		mutated := V5PublicAggregateDocument(&syn)
 		zero := 0
 		mutated.Cells[1].Hybrid.VariantHits = &zero
 		if err := ValidateV5PublicAggregateDocument(mutated); err == nil {
-			t.Fatalf("expected validation error when unpublished B2B hybrid variant_hits is non-nil")
+			t.Fatalf("expected validation error when verified B2B hybrid variant_hits is replaced with zero")
 		}
 	})
 }

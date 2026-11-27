@@ -26,3 +26,13 @@
   .portal-account-mobile a { color: #545f70; }
   .portal-overview .portal-shelf { grid-auto-columns: 172px; }
 }
+
+.portal-sidebar-drawer { display: none; }
+
+@media (max-width: 1199px) {
+  .portal-sidebar-drawer {
+    display: block; position: relative; z-index: 2;
+    padding: 12px 16px;
+  }
+  .portal-sidebar-drawer .sidebar { width: min(100%, 320px); display: block; }
+}

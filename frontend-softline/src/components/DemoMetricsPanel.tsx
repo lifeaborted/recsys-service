@@ -59,6 +59,17 @@ export function DemoMetricsPanel({
         Варианты гибрида: A {variants.A.hits} из {variants.A.total} ({share(variants.A.share)}),
         B {variants.B.hits} из {variants.B.total} ({share(variants.B.share)}).
       </p>
+      <details className="demo-quality__scroll">
+        <summary>Полнота выдачи и попадания гибрида</summary>
+        <table className="demo-quality__table">
+          <thead><tr><th>Разрез</th><th>Fill Rate</th><th>Full3Rate</th><th>Варианты</th><th>Новые продукты</th></tr></thead>
+          <tbody>{metrics.hybridCoverage.map((row) => <tr key={row.cohort + row.group}>
+            <th scope="row">{row.cohort} · {row.group === "all" ? "все" : row.group}</th>
+            <td>{share(row.fill_rate)}</td><td>{share(row.full3_rate)}</td>
+            <td>{row.variant_hits}</td><td>{row.new_product_hits}</td>
+          </tr>)}</tbody>
+        </table>
+      </details>
       <p className="demo-quality__line demo-quality__line_note">
         Около {visits.share}% визитов уходят без целевого действия. {visits.note}
       </p>

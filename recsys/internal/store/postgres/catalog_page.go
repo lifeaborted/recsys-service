@@ -25,8 +25,8 @@ func (s *Store) ListProductsPage(ctx context.Context, limit, offset int, query s
 	countArgs := []any{}
 	dataArgs := []any{limit, offset}
 	if query != "" {
-		countParts = append(countParts, "sc.name ILIKE '%' || $1 || '%' OR COALESCE(sc.vendor_code, '') ILIKE '%' || $1 || '%'")
-		dataParts = append(dataParts, "sc.name ILIKE '%' || $3 || '%' OR COALESCE(sc.vendor_code, '') ILIKE '%' || $3 || '%'")
+		countParts = append(countParts, "(sc.name ILIKE '%' || $1 || '%' OR COALESCE(sc.vendor_code, '') ILIKE '%' || $1 || '%')")
+		dataParts = append(dataParts, "(sc.name ILIKE '%' || $3 || '%' OR COALESCE(sc.vendor_code, '') ILIKE '%' || $3 || '%')")
 		countArgs = append(countArgs, query)
 		dataArgs = append(dataArgs, query)
 	}

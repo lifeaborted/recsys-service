@@ -28,7 +28,7 @@ export const ROUTE_TITLES: Record<RouteKey, { title: string; caption: string }> 
   orders: { title: "Мои заказы", caption: "История заказов" },
   keys: { title: "Ключи и дистрибутивы", caption: "Лицензии и ключи" },
   trials: { title: "Пробные лицензии", caption: "Пробные версии" },
-  contacts: { title: "Контакты", caption: "КонтактыSoftline" },
+  contacts: { title: "Контакты", caption: "Контакты Softline" },
   notifications: { title: "Уведомления", caption: "Уведомления" },
   profile: { title: "Профиль", caption: "Настройки интеграции" },
   subscriptions: { title: "Подписки", caption: "Активные подписки" },

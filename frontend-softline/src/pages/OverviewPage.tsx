@@ -44,7 +44,7 @@ export function OverviewPage() {
   return (
     <div className="home-page">
       <Fragment html={INFO_WIDGETS_HTML} className="mobile-hidden" />
-      <Fragment html={PROMO_HTML} />
+      <Fragment html={PROMO_HTML.replace(" - у</", "</")} />
 
       <section className="flex-column gap-16 portal-overview" aria-labelledby="portal-recommendations">
         <h1 className="heading-xl sl-color-text" id="portal-recommendations">Вам может подойти</h1>
